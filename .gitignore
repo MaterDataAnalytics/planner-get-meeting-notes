@@ -10,6 +10,9 @@ Workflow.ipynb
 # Config with passwords
 config.py
 
+# test Excel files
+test_files/
+
 # C extensions
 *.so
 
