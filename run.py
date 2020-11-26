@@ -81,6 +81,7 @@ def run():
                               meeting_notes_index_col=meeting_notes_index_col)
 
     # Clean the line breaks
+    df = df.replace('<br/>', '\n', regex=True)
 
     # send the dataframe
     send_dataframe(username=my_outlook_username, password=my_outlook_password, send_from=send_from, send_to=send_to,
