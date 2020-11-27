@@ -67,7 +67,7 @@ def send_dataframe(username, password, send_from, send_to, subject, body, df):
         return False
 
     server.sendmail(send_from, send_to, multipart.as_string())
-    print('Email sent successfully')
+    logger.info('Email with meeting notes sent successfully')
     server.quit()
 
 
@@ -86,10 +86,12 @@ def run():
     df = exec_procedure_to_df(cs=cs, query=query_sp, meetingDate=meetingDate, planId=planId, maxDays=maxDays,
                               meeting_notes_columns=meeting_notes_columns,
                               meeting_notes_index_col=meeting_notes_index_col)
+    logger.info('Procedure executed and dataframe created')
 
     # send the dataframe
     send_dataframe(username=my_outlook_username, password=my_outlook_password, send_from=send_from, send_to=send_to,
                    subject=subject, body=body, df=replace_breaks(df))
+    logger.info('Email sent successfully')
 
 
 def ping_func():
