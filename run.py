@@ -1,27 +1,19 @@
 import pandas as pd
 import io
+import os
 import smtplib
 from smtplib import SMTPAuthenticationError
 from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-from database import exec_procedure_to_df
+from database import exec_procedure_to_df, query_to_df
 
-from config import cs
-# cs should be of the following format:
-#
-# cs = (
-#     "DRIVER={ODBC Driver 17 for SQL Server};"
-#     "Authentication=ActiveDirectoryPassword;"
-#     "SERVER=mda-sql-aap-dev-ase.database.windows.net;"
-#     "DATABASE=MDA-DB-DEV-CLA-AE;"
-#     "UID=YOUR_USERNAME_TO_SQL_DB;"
-#     "PWD=YOUR_PASSWORD_SQL_DB;"
-#     )
-from config import my_outlook_username, my_outlook_password
+from config import my_outlook_username, my_outlook_password, username, password
 
-from parameters import meetingDate, planId, maxDays, meeting_notes_columns, meeting_notes_index_col, send_from, send_to, subject, body
+from parameters import meetingDate, planId, maxDays, meeting_notes_columns, meeting_notes_index_col, send_from, send_to, \
+    subject, body
+
 
 def replace_breaks(df):
     '''
@@ -72,20 +64,86 @@ def send_dataframe(username, password, send_from, send_to, subject, body, df):
 
 
 def run():
+    query_sp = 'exec [MDA-DB-DW-CLA-AE].planner.createMeetingNotes ?, ?, ?'
 
-    query_sp = 'exec [MDA-DB-DEV-CLA-AE].planner.createMeetingNotes2 ?, ?, ?'
+    cs = (
+        "DRIVER={ODBC Driver 17 for SQL Server};"
+        "SERVER=mda-sql-dw-cla-ae.database.windows.net;"
+        "DATABASE=MDA-DB-DW-CLA-AE;"
+        f"UID={username};"
+        f"PWD={password};"
+    )
 
     # exec proc
     df = exec_procedure_to_df(cs=cs, query=query_sp, meetingDate=meetingDate, planId=planId, maxDays=maxDays,
                               meeting_notes_columns=meeting_notes_columns,
                               meeting_notes_index_col=meeting_notes_index_col)
 
-    # Clean the line breaks
-    df = df.replace('<br/>', '\n', regex=True)
-
     # send the dataframe
     send_dataframe(username=my_outlook_username, password=my_outlook_password, send_from=send_from, send_to=send_to,
-                   subject=subject, body=body, df=df)
+                   subject=subject, body=body, df=replace_breaks(df))
+
+
+import pickle
+
+def ping_func():
+    '''
+    Run daily before midnight, after Azure function extracted everything from Planner;
+    Compare the CompleteDateTime of the task with the previous CompletedDateTime;
+    Extract meeting notes if CreatedDateTime differs from the previous one
+    '''
+
+    # (1) == Get the 'Meeting agenda and Attendees' Task latest record <-- this will be only one row with the latest CompletedDateTime
+    query = '''
+    select top(1) PlanId
+    ,BucketId
+    ,TaskId
+    ,Title
+    ,PercentComplete
+    ,CreatedDateTime
+    ,CompletedDateTime
+    ,LoadDate
+    from [planner].[Task]
+    where LoadDate= (select max(LoadDate) from [planner].[TaskPost])
+    and BucketId = 'sds4wgPMLU6dgGF_P0lEucgAIsU2'
+    and title like '%meeting focus and attendees%'
+    and CompletedDateTime is not NULL
+    order by CompletedDateTime desc
+    '''
+
+    cs = (
+        "DRIVER={ODBC Driver 17 for SQL Server};"
+        "SERVER=mda-sql-dw-cla-ae.database.windows.net;"
+        "DATABASE=MDA-DB-DW-CLA-AE;"
+        f"UID={username};"
+        f"PWD={password};"
+    )
+
+    task_df = query_to_df(cs=cs, query=query,
+                          cols=['PlanId', 'BucketId', 'TaskId', 'Title', 'PercentComplete', 'CreatedDateTime',
+                                'CompletedDateTime', 'LoadDate'])
+
+    # (2) == compare CompletedDateTime with the previous meeting date ====
+
+    # (2.1) == unpickle previous meeting date
+    try:
+        previous_meeting_date = pickle.load(open('previous_meeting_date.pickle', 'rb'))
+    except (OSError, IOError) as e:
+        previous_meeting_date = task_df.loc[0, 'CompletedDateTime']
+        pickle.dump(previous_meeting_date, open('previous_meeting_date.pickle', 'wb'))
+
+    if previous_meeting_date < task_df.loc[0, 'CompletedDateTime']:
+        # (2.2) == extract meeting notes and send the email with Excel file attached
+        run()
+
+        # (2.3) == update a previous_meeting_date and export variable somehow
+        previous_meeting_date = task_df.loc[0, 'CompletedDateTime']
+
+        # (2.4) == save the updated previous_meeting_date
+        pickle.dump(previous_meeting_date, open('previous_meeting_date.pickle', 'wb'))
+
+    else:
+        print('New meeting has not been holden yet')
 
 
 if __name__ == "__main__":
