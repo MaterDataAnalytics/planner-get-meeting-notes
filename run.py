@@ -147,4 +147,4 @@ def ping_func():
 
 
 if __name__ == "__main__":
-    run()
+    ping_func()
