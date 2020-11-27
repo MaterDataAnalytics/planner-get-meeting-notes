@@ -6,6 +6,8 @@ from smtplib import SMTPAuthenticationError
 from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+import logging
+import os
 
 from database import exec_procedure_to_df, query_to_df
 
@@ -32,6 +34,10 @@ def export_excel(df):
 
 
 def send_dataframe(username, password, send_from, send_to, subject, body, df):
+
+    # logger
+    logger = logging.getLogger('main_logger')
+
     multipart = MIMEMultipart()
     multipart['From'] = send_from
     multipart['To'] = send_to
@@ -47,6 +53,7 @@ def send_dataframe(username, password, send_from, send_to, subject, body, df):
     try:
         server = smtplib.SMTP('smtp.mater.org.au', '587')
     except smtplib.socket.gaierror:
+        logger.error('smtplib.socket.gaierror')
         return False
     server.ehlo()
     server.starttls()
@@ -54,6 +61,7 @@ def send_dataframe(username, password, send_from, send_to, subject, body, df):
     try:
         server.login(username, password)
     except SMTPAuthenticationError:
+        logger.error('SMTPAuthenticationError')
         server.quit()
         print('Authentication FAILED. Incorrect login credentials. Check username and password.')
         return False
@@ -91,6 +99,9 @@ def ping_func():
     Extract meeting notes if CreatedDateTime differs from the previous one
     '''
 
+    # add logger
+    logger = logging.getLogger('main_logger')
+
     # (1) == Get the 'Meeting agenda and Attendees' Task latest record <-- this will be only one row with the latest CompletedDateTime
     query = '''
     select top(1) PlanId
@@ -127,6 +138,7 @@ def ping_func():
     try:
         previous_meeting_date = pickle.load(open('previous_meeting_date.pickle', 'rb'))
     except (OSError, IOError) as e:
+        logger.info('Creating previous meeting date, because no value was found')
         previous_meeting_date = task_df.loc[0, 'CompletedDateTime']
         pickle.dump(previous_meeting_date, open('previous_meeting_date.pickle', 'wb'))
 
@@ -141,8 +153,23 @@ def ping_func():
         pickle.dump(previous_meeting_date, open('previous_meeting_date.pickle', 'wb'))
 
     else:
-        print('New meeting has not been holden yet')
+        logger.info('New meeting has not been holden yet')
 
 
 if __name__ == "__main__":
+
+    # Add logger
+    logger = logging.getLogger('main_logger')
+    logger.setLevel(logging.INFO)
+    # create a file handler
+    fh = logging.FileHandler('planner_get_meeting_notes.log', mode='a', encoding=None, delay=False)
+    fh.setLevel(logging.DEBUG)
+
+    # format
+    formatter = logging.Formatter('-->%(asctime)s - %(name)s:%(levelname)s - %(message)s')
+    fh.setFormatter(formatter)
+
+    # add the handlers to the logger
+    logger.addHandler(fh)
+
     ping_func()
