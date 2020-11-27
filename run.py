@@ -1,6 +1,6 @@
 import pandas as pd
 import io
-import os
+import pickle
 import smtplib
 from smtplib import SMTPAuthenticationError
 from email.mime.application import MIMEApplication
@@ -83,8 +83,6 @@ def run():
     send_dataframe(username=my_outlook_username, password=my_outlook_password, send_from=send_from, send_to=send_to,
                    subject=subject, body=body, df=replace_breaks(df))
 
-
-import pickle
 
 def ping_func():
     '''
