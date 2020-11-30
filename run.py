@@ -1,3 +1,9 @@
+'''
+
+
+
+'''
+
 import pandas as pd
 import io
 import pickle
@@ -7,25 +13,37 @@ from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import logging
-import os
 
 from database import exec_procedure_to_df, query_to_df
 
 from config import my_outlook_username, my_outlook_password, username, password
 
-from parameters import meetingDate, planId, maxDays, meeting_notes_columns, meeting_notes_index_col, send_from, send_to, \
+from parameters import planId, maxDays, meeting_notes_columns, meeting_notes_index_col, send_from, send_to, \
     subject, body
 
 
 def replace_breaks(df):
-    '''
+    r"""
     Replace breaks '<br/>' with a new line character '\n' in a dataframe
-    '''
+
+    :param df: input dataframe
+
+    :return: output dataframe
+    """
+
     df = df.replace('<br/>', '\n', regex=True)
     return df
 
 
 def export_excel(df):
+    '''
+    Exel exporter to creae an Excel file as an IO buffer to avoid saving a physical copy
+
+    :param df: input datagrame
+
+    :return: buffer value
+    '''
+
     with io.BytesIO() as buffer:
         writer = pd.ExcelWriter(buffer)
         df.to_excel(writer)
@@ -34,6 +52,25 @@ def export_excel(df):
 
 
 def send_dataframe(username, password, send_from, send_to, subject, body, df):
+    '''
+    Send data via email as an Excel attachment
+
+    :param username: SMTP server username (usually mater email address @mater.org.au)
+
+    :param password: SMTP server password (usually mater email password)
+
+    :param send_from: mater email address
+
+    :param send_to: mater email address
+
+    :param subject: email subject
+
+    :param body: email body text
+
+    :param df: dataframe to send as an Excel attachment
+
+    :return: error message in case of error
+    '''
 
     # logger
     logger = logging.getLogger('main_logger')
@@ -71,7 +108,15 @@ def send_dataframe(username, password, send_from, send_to, subject, body, df):
     server.quit()
 
 
-def run():
+def run(meetingDate):
+    '''
+    Run the pipeline of sending the meeting notes
+
+    :param meetingDate: meeting date identified as a date of 'Meeting Agenda and Attendees' task completion
+
+    :return:
+    '''
+
     query_sp = 'exec [MDA-DB-DW-CLA-AE].planner.createMeetingNotes ?, ?, ?'
 
     cs = (
@@ -96,9 +141,9 @@ def run():
 
 def ping_func():
     '''
-    Run daily before midnight, after Azure function extracted everything from Planner;
-    Compare the CompleteDateTime of the task with the previous CompletedDateTime;
-    Extract meeting notes if CreatedDateTime differs from the previous one
+    The polling function, to kick-start run.py when the condition met: a new 'Meeting Agenda and Attendees' task was marked as 'completed'
+
+    :return:
     '''
 
     # add logger
@@ -146,7 +191,8 @@ def ping_func():
 
     if previous_meeting_date < task_df.loc[0, 'CompletedDateTime']:
         # (2.2) == extract meeting notes and send the email with Excel file attached
-        run()
+        meetingDate = task_df.loc[0, 'CompletedDateTime']
+        run(meetingDate=meetingDate)
 
         # (2.3) == update a previous_meeting_date and export variable somehow
         previous_meeting_date = task_df.loc[0, 'CompletedDateTime']
@@ -159,7 +205,6 @@ def ping_func():
 
 
 if __name__ == "__main__":
-
     # Add logger
     logger = logging.getLogger('main_logger')
     logger.setLevel(logging.INFO)

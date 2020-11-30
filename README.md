@@ -36,4 +36,4 @@ alina.motygullina@mater.org.au
 Copyright
 -------
 
-# Copyright 2020 Mater Misericordiae Ltd.
+Copyright 2020 Mater Misericordiae Ltd.

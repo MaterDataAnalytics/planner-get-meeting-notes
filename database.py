@@ -1,68 +1,48 @@
 ###############################################################################
 #
-# File:     storage.py
+# File:     database.py
 #
-# Purpose:  The relational data sets structured as classes for ease of use.
+# Purpose:  database operations.
 #
 # Copyright 2020 Mater Misericordiae Ltd.
 #
 ###############################################################################
-"""
-This holds the following classes:
 
-    * Task - the main task information
-    * Post - the comments availalbe within the tasks (one-to-many)
-    * Assignment - the assignees of a task (one-to-many)
-    * Attachment - the attachments in a task (one-to-many)
-    * Checklist - the check list, if available, of a task (one-to-many)
+'''
 
-These classes define the properties to be setup, as well as the database insert queries, through a `save` method.
-"""
+Functions to pull data from database by running a query or executing a stored procedure.
 
-# Python libraries
+The output is saved to a pandas dataframe for further consumption.
+
+*Copyright 2020 Mater Misericordiae Ltd.*
+
+'''
 
 from bs4 import BeautifulSoup as bs
 import pandas as pd
 import pyodbc
 
-def clearHtml(html):
-    soup = bs(html)
-
-    # kill all script and style elements
-    for script in soup(["script", "style"]):
-        script.extract()  # rip it out
-
-    # remove garbage from Planner : <table id="x_jSanity_hideInPlanner">
-    t = soup.find('table', {'id': 'x_jSanity_hideInPlanner'})
-    if t:
-        t.extract()
-
-    # remove auto-generated comments from Planner : <font size="2">
-    s = soup.find('font', {"size": "2"})
-    if s:
-        s.extract()
-
-    # get text
-    text = soup.get_text()
-
-    # break into lines and remove leading and trailing space on each
-    lines = (line.strip() for line in text.splitlines())
-    # break multi-headlines into a line each
-    chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
-    # drop blank lines
-    text = '\n'.join(chunk for chunk in chunks if chunk)
-
-    # replace double quotation marks with single quotation marks to kick on the SET QUOTED_IDENTIFIER OFF in a query
-    if '\"' in text:
-        text = text.replace('\"', '\'')
-
-    # escape issues with updating SQL table with None or empty values
-    if text == '':
-        text = 'None'
-
-    return text
 
 def exec_procedure_to_df(cs, query, meetingDate, planId, maxDays, meeting_notes_columns, meeting_notes_index_col):
+    '''
+    Execute a stored procedure
+
+    :param cs: connection string for the ODBC SQL server
+
+    :param query: query to run, e.g ' exec planner.stored_procedure_name param1_value, param2_value'
+
+    :param meetingDate: meeting date
+
+    :param planId: meeting ID
+
+    :param maxDays: how many days backwards to take into account
+
+    :param meeting_notes_columns: column names for meeting notes export file
+
+    :param meeting_notes_index_col: index column name
+
+    :return: dataframe
+    '''
     # make connection pyodbc
     conn = pyodbc.connect(cs)
 
@@ -77,6 +57,17 @@ def exec_procedure_to_df(cs, query, meetingDate, planId, maxDays, meeting_notes_
 
 
 def query_to_df(cs, query, cols):
+    '''
+    Run a query
+
+    :param cs: connection string for the ODBC SQL server
+
+    :param query: query to run, e.g 'select * from planner.table'
+
+    :param cols: column names in the output dataframe
+
+    :return: dataframe
+    '''
     # make connection pyodbc
     conn = pyodbc.connect(cs)
 

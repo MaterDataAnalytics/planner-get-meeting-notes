@@ -13,9 +13,6 @@ config.py
 # test Excel files
 test_files/
 
-# docs
-docs/
-
 # C extensions
 *.so
 
