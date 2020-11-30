@@ -1,3 +1,9 @@
+'''
+
+
+
+'''
+
 import pandas as pd
 import io
 import pickle
@@ -6,24 +12,38 @@ from smtplib import SMTPAuthenticationError
 from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+import logging
 
 from database import exec_procedure_to_df, query_to_df
 
 from config import my_outlook_username, my_outlook_password, username, password
 
-from parameters import meetingDate, planId, maxDays, meeting_notes_columns, meeting_notes_index_col, send_from, send_to, \
+from parameters import planId, maxDays, meeting_notes_columns, meeting_notes_index_col, send_from, send_to, \
     subject, body
 
 
 def replace_breaks(df):
-    '''
+    r"""
     Replace breaks '<br/>' with a new line character '\n' in a dataframe
-    '''
+
+    :param df: input dataframe
+
+    :return: output dataframe
+    """
+
     df = df.replace('<br/>', '\n', regex=True)
     return df
 
 
 def export_excel(df):
+    '''
+    Exel exporter to creae an Excel file as an IO buffer to avoid saving a physical copy
+
+    :param df: input datagrame
+
+    :return: buffer value
+    '''
+
     with io.BytesIO() as buffer:
         writer = pd.ExcelWriter(buffer)
         df.to_excel(writer)
@@ -32,6 +52,29 @@ def export_excel(df):
 
 
 def send_dataframe(username, password, send_from, send_to, subject, body, df):
+    '''
+    Send data via email as an Excel attachment
+
+    :param username: SMTP server username (usually mater email address @mater.org.au)
+
+    :param password: SMTP server password (usually mater email password)
+
+    :param send_from: mater email address
+
+    :param send_to: mater email address
+
+    :param subject: email subject
+
+    :param body: email body text
+
+    :param df: dataframe to send as an Excel attachment
+
+    :return: error message in case of error
+    '''
+
+    # logger
+    logger = logging.getLogger('main_logger')
+
     multipart = MIMEMultipart()
     multipart['From'] = send_from
     multipart['To'] = send_to
@@ -47,6 +90,7 @@ def send_dataframe(username, password, send_from, send_to, subject, body, df):
     try:
         server = smtplib.SMTP('smtp.mater.org.au', '587')
     except smtplib.socket.gaierror:
+        logger.error('smtplib.socket.gaierror')
         return False
     server.ehlo()
     server.starttls()
@@ -54,16 +98,25 @@ def send_dataframe(username, password, send_from, send_to, subject, body, df):
     try:
         server.login(username, password)
     except SMTPAuthenticationError:
+        logger.error('SMTPAuthenticationError')
         server.quit()
         print('Authentication FAILED. Incorrect login credentials. Check username and password.')
         return False
 
     server.sendmail(send_from, send_to, multipart.as_string())
-    print('Email sent successfully')
+    logger.info('Email with meeting notes sent successfully')
     server.quit()
 
 
-def run():
+def run(meetingDate):
+    '''
+    Run the pipeline of sending the meeting notes
+
+    :param meetingDate: meeting date identified as a date of 'Meeting Agenda and Attendees' task completion
+
+    :return:
+    '''
+
     query_sp = 'exec [MDA-DB-DW-CLA-AE].planner.createMeetingNotes ?, ?, ?'
 
     cs = (
@@ -78,18 +131,23 @@ def run():
     df = exec_procedure_to_df(cs=cs, query=query_sp, meetingDate=meetingDate, planId=planId, maxDays=maxDays,
                               meeting_notes_columns=meeting_notes_columns,
                               meeting_notes_index_col=meeting_notes_index_col)
+    logger.info('Procedure executed and dataframe created')
 
     # send the dataframe
     send_dataframe(username=my_outlook_username, password=my_outlook_password, send_from=send_from, send_to=send_to,
                    subject=subject, body=body, df=replace_breaks(df))
+    logger.info('Email sent successfully')
 
 
 def ping_func():
     '''
-    Run daily before midnight, after Azure function extracted everything from Planner;
-    Compare the CompleteDateTime of the task with the previous CompletedDateTime;
-    Extract meeting notes if CreatedDateTime differs from the previous one
+    The polling function, to kick-start run.py when the condition met: a new 'Meeting Agenda and Attendees' task was marked as 'completed'
+
+    :return:
     '''
+
+    # add logger
+    logger = logging.getLogger('main_logger')
 
     # (1) == Get the 'Meeting agenda and Attendees' Task latest record <-- this will be only one row with the latest CompletedDateTime
     query = '''
@@ -127,12 +185,14 @@ def ping_func():
     try:
         previous_meeting_date = pickle.load(open('previous_meeting_date.pickle', 'rb'))
     except (OSError, IOError) as e:
+        logger.info('Creating previous meeting date, because no value was found')
         previous_meeting_date = task_df.loc[0, 'CompletedDateTime']
         pickle.dump(previous_meeting_date, open('previous_meeting_date.pickle', 'wb'))
 
     if previous_meeting_date < task_df.loc[0, 'CompletedDateTime']:
         # (2.2) == extract meeting notes and send the email with Excel file attached
-        run()
+        meetingDate = task_df.loc[0, 'CompletedDateTime']
+        run(meetingDate=meetingDate)
 
         # (2.3) == update a previous_meeting_date and export variable somehow
         previous_meeting_date = task_df.loc[0, 'CompletedDateTime']
@@ -141,8 +201,22 @@ def ping_func():
         pickle.dump(previous_meeting_date, open('previous_meeting_date.pickle', 'wb'))
 
     else:
-        print('New meeting has not been holden yet')
+        logger.info('New meeting has not been holden yet')
 
 
 if __name__ == "__main__":
+    # Add logger
+    logger = logging.getLogger('main_logger')
+    logger.setLevel(logging.INFO)
+    # create a file handler
+    fh = logging.FileHandler('planner_get_meeting_notes.log', mode='a', encoding=None, delay=False)
+    fh.setLevel(logging.DEBUG)
+
+    # format
+    formatter = logging.Formatter('-->%(asctime)s - %(name)s:%(levelname)s - %(message)s')
+    fh.setFormatter(formatter)
+
+    # add the handlers to the logger
+    logger.addHandler(fh)
+
     ping_func()

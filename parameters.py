@@ -1,3 +1,23 @@
+'''
+
+Currently plannerget-meeting-notes library does not provide a user interface (UI).
+
+**parameters.py** has to be modified manually if any key parameters changed. The values listed in this file are used by default.
+
+The following parameters are managed herein:
+
+1. Plan ID (relates to a Meeting Name)
+
+2. Number of days counted backwards when meeting notes are being exported (old comments are not taken into account)
+
+3. Names of columns used in the Excel output file
+
+4. SMTP server name and port
+
+5. Email parameters, such as **send to**, **send from**, **subject** and **email body**.
+
+'''
+
 # user input
 meetingDate = '2020-11-4'
 planId = '-6-Vic94GE-s5oiwg57nAsgAFOm6'
