@@ -13,10 +13,11 @@ from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import logging
+from datetime import datetime
 
 from database import exec_procedure_to_df, query_to_df
 
-from config import my_outlook_username, my_outlook_password, username, password
+from config import my_outlook_username, my_outlook_password, username, password, my_username, my_password
 
 from parameters import planId, maxDays, meeting_notes_columns, meeting_notes_index_col, send_from, send_to, \
     subject, body
@@ -108,24 +109,16 @@ def send_dataframe(username, password, send_from, send_to, subject, body, df):
     server.quit()
 
 
-def run(meetingDate):
+def run(cs, query_sp, meetingDate):
     '''
     Run the pipeline of sending the meeting notes
 
+    :param cs: connecting string, specified in ping_func()
+    :param query_sp: query string to execute a stored procedure, specified in ping_func()
     :param meetingDate: meeting date identified as a date of 'Meeting Agenda and Attendees' task completion
 
     :return:
     '''
-
-    query_sp = 'exec [MDA-DB-DW-CLA-AE].planner.createMeetingNotes ?, ?, ?'
-
-    cs = (
-        "DRIVER={ODBC Driver 17 for SQL Server};"
-        "SERVER=mda-sql-dw-cla-ae.database.windows.net;"
-        "DATABASE=MDA-DB-DW-CLA-AE;"
-        f"UID={username};"
-        f"PWD={password};"
-    )
 
     # exec proc
     df = exec_procedure_to_df(cs=cs, query=query_sp, meetingDate=meetingDate, planId=planId, maxDays=maxDays,
@@ -167,7 +160,10 @@ def ping_func():
     order by CompletedDateTime desc
     '''
 
-    cs = (
+    query_sp_prod = 'exec [MDA-DB-DW-CLA-AE].planner.createMeetingNotes ?, ?, ?'
+    query_sp_dev = 'exec [MDA-DB-DEV-CLA-AE].planner.createMeetingNotes ?, ?, ?'
+
+    cs_prod = (
         "DRIVER={ODBC Driver 17 for SQL Server};"
         "SERVER=mda-sql-dw-cla-ae.database.windows.net;"
         "DATABASE=MDA-DB-DW-CLA-AE;"
@@ -175,7 +171,16 @@ def ping_func():
         f"PWD={password};"
     )
 
-    task_df = query_to_df(cs=cs, query=query,
+    cs_dev = (
+        "DRIVER={ODBC Driver 17 for SQL Server};"
+        "Authentication=ActiveDirectoryPassword;"
+        "SERVER=mda-sql-aap-dev-ase.database.windows.net;"
+        "DATABASE=MDA-DB-DEV-CLA-AE;"
+        f"UID={my_username};"
+        f"PWD={my_password};"
+    )
+
+    task_df = query_to_df(cs=cs_prod, query=query,
                           cols=['PlanId', 'BucketId', 'TaskId', 'Title', 'PercentComplete', 'CreatedDateTime',
                                 'CompletedDateTime', 'LoadDate'])
 
@@ -186,22 +191,24 @@ def ping_func():
         previous_meeting_date = pickle.load(open('previous_meeting_date.pickle', 'rb'))
     except (OSError, IOError) as e:
         logger.info('Creating previous meeting date, because no value was found')
-        previous_meeting_date = task_df.loc[0, 'CompletedDateTime']
+        previous_meeting_date = task_df.loc[0, "CompletedDateTime"]
         pickle.dump(previous_meeting_date, open('previous_meeting_date.pickle', 'wb'))
 
     if previous_meeting_date < task_df.loc[0, 'CompletedDateTime']:
         # (2.2) == extract meeting notes and send the email with Excel file attached
         meetingDate = task_df.loc[0, 'CompletedDateTime']
-        run(meetingDate=meetingDate)
+        run(cs=cs_prod, query_sp=query_sp_prod, meetingDate=meetingDate)
 
         # (2.3) == update a previous_meeting_date and export variable somehow
         previous_meeting_date = task_df.loc[0, 'CompletedDateTime']
 
         # (2.4) == save the updated previous_meeting_date
         pickle.dump(previous_meeting_date, open('previous_meeting_date.pickle', 'wb'))
+        logger.info(f'New meeting has been holden on {previous_meeting_date}')
 
     else:
         logger.info('New meeting has not been holden yet')
+        logger.info(f'Last meeting has been holden on {previous_meeting_date}')
 
 
 if __name__ == "__main__":
