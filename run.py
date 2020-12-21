@@ -17,11 +17,16 @@ from datetime import datetime
 
 from database import exec_procedure_to_df, query_to_df
 
-from config import my_outlook_username, my_outlook_password, username, password, my_username, my_password
-
 from parameters import planId, maxDays, meeting_notes_columns, meeting_notes_index_col, send_from, send_to, \
     subject, body
 
+# import CONFIG file for DEV or PROD
+import configparser
+
+CONFIG = configparser.ConfigParser()
+CONFIG.read('config.ini')
+
+CONFIG = CONFIG.DEV
 
 def replace_breaks(df):
     r"""
@@ -160,27 +165,11 @@ def ping_func():
     order by CompletedDateTime desc
     '''
 
-    query_sp_prod = 'exec [MDA-DB-DW-CLA-AE].planner.createMeetingNotes ?, ?, ?'
-    query_sp_dev = 'exec [MDA-DB-DEV-CLA-AE].planner.createMeetingNotes ?, ?, ?'
+    query_sp = CONFIG['query_sp']
 
-    cs_prod = (
-        "DRIVER={ODBC Driver 17 for SQL Server};"
-        "SERVER=mda-sql-dw-cla-ae.database.windows.net;"
-        "DATABASE=MDA-DB-DW-CLA-AE;"
-        f"UID={username};"
-        f"PWD={password};"
-    )
+    cs = CONFIG['cs']
 
-    cs_dev = (
-        "DRIVER={ODBC Driver 17 for SQL Server};"
-        "Authentication=ActiveDirectoryPassword;"
-        "SERVER=mda-sql-aap-dev-ase.database.windows.net;"
-        "DATABASE=MDA-DB-DEV-CLA-AE;"
-        f"UID={my_username};"
-        f"PWD={my_password};"
-    )
-
-    task_df = query_to_df(cs=cs_prod, query=query,
+    task_df = query_to_df(cs=cs, query=query,
                           cols=['PlanId', 'BucketId', 'TaskId', 'Title', 'PercentComplete', 'CreatedDateTime',
                                 'CompletedDateTime', 'LoadDate'])
 
@@ -197,7 +186,7 @@ def ping_func():
     if previous_meeting_date < task_df.loc[0, 'CompletedDateTime']:
         # (2.2) == extract meeting notes and send the email with Excel file attached
         meetingDate = task_df.loc[0, 'CompletedDateTime']
-        run(cs=cs_prod, query_sp=query_sp_prod, meetingDate=meetingDate)
+        run(cs=cs, query_sp=query_sp, meetingDate=meetingDate)
 
         # (2.3) == update a previous_meeting_date and export variable somehow
         previous_meeting_date = task_df.loc[0, 'CompletedDateTime']

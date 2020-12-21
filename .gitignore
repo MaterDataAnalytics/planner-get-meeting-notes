@@ -9,6 +9,7 @@ Workflow.ipynb
 
 # Config with passwords
 config.py
+config.ini
 
 # test Excel files
 test_files/
