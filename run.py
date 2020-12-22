@@ -6,14 +6,13 @@
 
 import pandas as pd
 import io
-import pickle
 import smtplib
 from smtplib import SMTPAuthenticationError
 from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from database import exec_procedure_to_df, query_to_df
 
@@ -23,10 +22,10 @@ from parameters import planId, maxDays, meeting_notes_columns, meeting_notes_ind
 # import CONFIG file for DEV or PROD
 import configparser
 
-CONFIG = configparser.ConfigParser()
-CONFIG.read('config.ini')
+config1 = configparser.ConfigParser()
+config1.read('config.ini')
 
-CONFIG = CONFIG.DEV
+CONFIG = config1.DEV
 
 def replace_breaks(df):
     r"""
@@ -149,14 +148,7 @@ def ping_func():
 
     # (1) == Get the 'Meeting agenda and Attendees' Task latest record <-- this will be only one row with the latest CompletedDateTime
     query = '''
-    select top(1) PlanId
-    ,BucketId
-    ,TaskId
-    ,Title
-    ,PercentComplete
-    ,CreatedDateTime
-    ,CompletedDateTime
-    ,LoadDate
+    select top(1) CompletedDateTime
     from [planner].[Task]
     where LoadDate= (select max(LoadDate) from [planner].[TaskPost])
     and BucketId = 'sds4wgPMLU6dgGF_P0lEucgAIsU2'
@@ -173,31 +165,38 @@ def ping_func():
                           cols=['PlanId', 'BucketId', 'TaskId', 'Title', 'PercentComplete', 'CreatedDateTime',
                                 'CompletedDateTime', 'LoadDate'])
 
+    # (2.0) == compare last CompletedDateTime with now() within 24 hours ====
+    if datetime.strptime(task_df.loc[0, 'CompletedDateTime'], "%Y-%m-%d %H:%M:%S.%f") > (datetime.now() - timedelta(days=1)):
+        run(cs=cs, query_sp=query_sp, meetingDate=task_df.loc[0, 'CompletedDateTime'])
+    else:
+        logger.info('New meeting has not been holden yet')
+        logger.info(f'Last meeting has been holden on {task_df.loc[0, "CompletedDateTime"]}')
+
     # (2) == compare CompletedDateTime with the previous meeting date ====
 
     # (2.1) == unpickle previous meeting date
-    try:
-        previous_meeting_date = pickle.load(open('previous_meeting_date.pickle', 'rb'))
-    except (OSError, IOError) as e:
-        logger.info('Creating previous meeting date, because no value was found')
-        previous_meeting_date = task_df.loc[0, "CompletedDateTime"]
-        pickle.dump(previous_meeting_date, open('previous_meeting_date.pickle', 'wb'))
-
-    if previous_meeting_date < task_df.loc[0, 'CompletedDateTime']:
-        # (2.2) == extract meeting notes and send the email with Excel file attached
-        meetingDate = task_df.loc[0, 'CompletedDateTime']
-        run(cs=cs, query_sp=query_sp, meetingDate=meetingDate)
-
-        # (2.3) == update a previous_meeting_date and export variable somehow
-        previous_meeting_date = task_df.loc[0, 'CompletedDateTime']
-
-        # (2.4) == save the updated previous_meeting_date
-        pickle.dump(previous_meeting_date, open('previous_meeting_date.pickle', 'wb'))
-        logger.info(f'New meeting has been holden on {previous_meeting_date}')
-
-    else:
-        logger.info('New meeting has not been holden yet')
-        logger.info(f'Last meeting has been holden on {previous_meeting_date}')
+    # try:
+    #     previous_meeting_date = pickle.load(open('previous_meeting_date.pickle', 'rb'))
+    # except (OSError, IOError) as e:
+    #     logger.info('Creating previous meeting date, because no value was found')
+    #     previous_meeting_date = task_df.loc[0, "CompletedDateTime"]
+    #     pickle.dump(previous_meeting_date, open('previous_meeting_date.pickle', 'wb'))
+    #
+    # if previous_meeting_date < task_df.loc[0, 'CompletedDateTime']:
+    #     # (2.2) == extract meeting notes and send the email with Excel file attached
+    #     meetingDate = task_df.loc[0, 'CompletedDateTime']
+    #     run(cs=cs, query_sp=query_sp, meetingDate=meetingDate)
+    #
+    #     # (2.3) == update a previous_meeting_date and export variable somehow
+    #     previous_meeting_date = task_df.loc[0, 'CompletedDateTime']
+    #
+    #     # (2.4) == save the updated previous_meeting_date
+    #     pickle.dump(previous_meeting_date, open('previous_meeting_date.pickle', 'wb'))
+    #     logger.info(f'New meeting has been holden on {previous_meeting_date}')
+    #
+    # else:
+    #     logger.info('New meeting has not been holden yet')
+    #     logger.info(f'Last meeting has been holden on {previous_meeting_date}')
 
 
 if __name__ == "__main__":
