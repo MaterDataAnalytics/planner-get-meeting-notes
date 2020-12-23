@@ -56,7 +56,7 @@ def exec_procedure_to_df(cs, query, meetingDate, planId, maxDays, meeting_notes_
     return df
 
 
-def query_to_df(cs, query, cols):
+def query_to_df(*params, cs, query, cols):
     '''
     Run a query
 
@@ -73,7 +73,7 @@ def query_to_df(cs, query, cols):
 
     cursor = conn.cursor()
     conn.autocommit = True
-    cursor.execute(query)
+    cursor.execute(query, params)
 
     results = cursor.fetchall()
     df = pd.DataFrame.from_records(results, columns=cols)

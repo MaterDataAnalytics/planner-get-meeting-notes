@@ -6,8 +6,9 @@
 
 import pandas as pd
 import io
-import pickle
 import smtplib
+import getopt
+import sys
 from smtplib import SMTPAuthenticationError
 from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
@@ -17,10 +18,36 @@ from datetime import datetime
 
 from database import exec_procedure_to_df, query_to_df
 
-from config import my_outlook_username, my_outlook_password, username, password, my_username, my_password
-
 from parameters import planId, maxDays, meeting_notes_columns, meeting_notes_index_col, send_from, send_to, \
     subject, body
+
+# import CONFIG file for DEV or PROD
+import configparser
+
+config = configparser.ConfigParser()
+config.read('config.ini')
+
+CONFIG = config['DEV']
+
+
+def usage():
+    """
+    Help output.
+    Print out how to use the available options.
+    """
+
+    print("""
+    Usage: python -m run [reference_date]
+
+    Runs generic script to send meeting notes if a new meeting occurred.
+    Available options:
+
+     -h, --help         Displays this help message
+     -d --date          Use the value as a reference date to create meeting notes if a meeting was hold within last 24 hours.
+                        Default option is now().
+                        Expected format: 'YYYY-M-D'
+                        Example: python -m run -d "2020-7-5"
+    """)
 
 
 def replace_breaks(df):
@@ -127,7 +154,8 @@ def run(cs, query_sp, meetingDate):
     logger.info('Procedure executed and dataframe created')
 
     # send the dataframe
-    send_dataframe(username=my_outlook_username, password=my_outlook_password, send_from=send_from, send_to=send_to,
+    send_dataframe(username=CONFIG['outlook_username'], password=CONFIG['outlook_password'], send_from=send_from,
+                   send_to=send_to,
                    subject=subject, body=body, df=replace_breaks(df))
     logger.info('Email sent successfully')
 
@@ -144,71 +172,56 @@ def ping_func():
 
     # (1) == Get the 'Meeting agenda and Attendees' Task latest record <-- this will be only one row with the latest CompletedDateTime
     query = '''
-    select top(1) PlanId
-    ,BucketId
-    ,TaskId
-    ,Title
-    ,PercentComplete
-    ,CreatedDateTime
-    ,CompletedDateTime
-    ,LoadDate
-    from [planner].[Task]
-    where LoadDate= (select max(LoadDate) from [planner].[TaskPost])
-    and BucketId = 'sds4wgPMLU6dgGF_P0lEucgAIsU2'
-    and title like '%meeting focus and attendees%'
-    and CompletedDateTime is not NULL
-    order by CompletedDateTime desc
+        declare @dateReference as datetime = ?
+        select 
+            t.planid, 
+            max(t.CompletedDateTime) as CompletedDateTime
+        from [planner].[Task] t
+            inner join [planner].PlanBucket b 
+                on t.PlanId = b.PlanId and t.LoadDate = b.LoadDate and t.BucketId = b.BucketId
+            inner join [planner].[Plan] p 
+                on t.PlanId = p.PlanId and t.LoadDate = p.LoadDate
+        where t.LoadDate= (select max(LoadDate) from [planner].[Task])
+            and b.BucketName like '%agenda%'
+            and t.title like '%meeting focus and attendees%'
+            and p.Title like '%committee%'
+            and t.CompletedDateTime is not NULL
+            and t.CompletedDateTime > dateadd(day, -1, @dateReference)
+        group by t.PlanId
     '''
 
-    query_sp_prod = 'exec [MDA-DB-DW-CLA-AE].planner.createMeetingNotes ?, ?, ?'
-    query_sp_dev = 'exec [MDA-DB-DEV-CLA-AE].planner.createMeetingNotes ?, ?, ?'
-
-    cs_prod = (
-        "DRIVER={ODBC Driver 17 for SQL Server};"
-        "SERVER=mda-sql-dw-cla-ae.database.windows.net;"
-        "DATABASE=MDA-DB-DW-CLA-AE;"
-        f"UID={username};"
-        f"PWD={password};"
-    )
-
-    cs_dev = (
-        "DRIVER={ODBC Driver 17 for SQL Server};"
-        "Authentication=ActiveDirectoryPassword;"
-        "SERVER=mda-sql-aap-dev-ase.database.windows.net;"
-        "DATABASE=MDA-DB-DEV-CLA-AE;"
-        f"UID={my_username};"
-        f"PWD={my_password};"
-    )
-
-    task_df = query_to_df(cs=cs_prod, query=query,
-                          cols=['PlanId', 'BucketId', 'TaskId', 'Title', 'PercentComplete', 'CreatedDateTime',
-                                'CompletedDateTime', 'LoadDate'])
-
-    # (2) == compare CompletedDateTime with the previous meeting date ====
-
-    # (2.1) == unpickle previous meeting date
-    try:
-        previous_meeting_date = pickle.load(open('previous_meeting_date.pickle', 'rb'))
-    except (OSError, IOError) as e:
-        logger.info('Creating previous meeting date, because no value was found')
-        previous_meeting_date = task_df.loc[0, "CompletedDateTime"]
-        pickle.dump(previous_meeting_date, open('previous_meeting_date.pickle', 'wb'))
-
-    if previous_meeting_date < task_df.loc[0, 'CompletedDateTime']:
-        # (2.2) == extract meeting notes and send the email with Excel file attached
-        meetingDate = task_df.loc[0, 'CompletedDateTime']
-        run(cs=cs_prod, query_sp=query_sp_prod, meetingDate=meetingDate)
-
-        # (2.3) == update a previous_meeting_date and export variable somehow
-        previous_meeting_date = task_df.loc[0, 'CompletedDateTime']
-
-        # (2.4) == save the updated previous_meeting_date
-        pickle.dump(previous_meeting_date, open('previous_meeting_date.pickle', 'wb'))
-        logger.info(f'New meeting has been holden on {previous_meeting_date}')
-
+    if len(sys.argv) < 2:
+        reference_date = datetime.now().strftime("%Y-%m-%d")
     else:
-        logger.info('New meeting has not been holden yet')
-        logger.info(f'Last meeting has been holden on {previous_meeting_date}')
+        try:
+            opts, args = getopt.gnu_getopt(
+                sys.argv[1:], "hd:", ["date="]
+            )
+        except getopt.GetoptError as err:
+            logging.error(str(err) + '.See --help for more information.')
+            print(str(err) + '.See --help for more information.')
+        # run query with date argument as reference date
+        for option, val in opts:
+            if option in ("-h", "--help"):
+                usage()
+                sys.exit(0)
+            elif option in ("-d", "--date"):
+                reference_date = val
+            else:
+                assert False, "Unhandled option, see --help for usage options"
+
+    query_sp = CONFIG['query_sp']
+    cs = CONFIG['cs']
+
+    # check that there are any plans with meetings to be processes
+    task_df = query_to_df(reference_date, cs=cs, query=query, cols=['planId', 'CompletedDateTime'])
+
+    # create meeting notes for all new meetings
+    if not task_df.empty:
+        for ind, row in task_df.iterrows():
+            run(cs=cs, query_sp=query_sp, meetingDate=task_df.loc[ind, 'CompletedDateTime'])
+    else:
+        logger.info('New meeting has not been held yet')
 
 
 if __name__ == "__main__":
