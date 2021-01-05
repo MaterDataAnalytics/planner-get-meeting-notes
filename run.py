@@ -1,7 +1,5 @@
 '''
 
-
-
 '''
 
 import pandas as pd
@@ -29,6 +27,14 @@ config.read('config.ini')
 
 CONFIG = config['DEV']
 
+# add the path for mda-python-lib
+sys.path.insert(0, CONFIG['MDA_PYTHON_LIB'])
+
+# MDA imports
+from mater.mda.utils.sql import Db
+from mater.core.logger import Log, LogLevel
+
+Log.setLogLevel(LogLevel.INFO)
 
 def usage():
     """
@@ -222,6 +228,7 @@ def ping_func():
             run(cs=cs, query_sp=query_sp, meetingDate=task_df.loc[ind, 'CompletedDateTime'])
     else:
         logger.info('New meeting has not been held yet')
+        Log.info('New meeting has not been held yet - from mda')
 
 
 if __name__ == "__main__":
