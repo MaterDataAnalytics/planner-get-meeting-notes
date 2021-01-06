@@ -25,7 +25,7 @@ import configparser
 config = configparser.ConfigParser()
 config.read('config.ini')
 
-CONFIG = config['DEV']
+CONFIG = config['PROD']
 
 # add the path for mda-python-lib
 sys.path.insert(0, CONFIG['MDA_PYTHON_LIB'])
@@ -125,6 +125,7 @@ def send_dataframe(username, password, send_from, send_to, subject, body, df):
         server = smtplib.SMTP('smtp.mater.org.au', '587')
     except smtplib.socket.gaierror:
         logger.error('smtplib.socket.gaierror')
+        Log.error('smtplib.socket.gaierror was encountered')
         return False
     server.ehlo()
     server.starttls()
@@ -133,12 +134,13 @@ def send_dataframe(username, password, send_from, send_to, subject, body, df):
         server.login(username, password)
     except SMTPAuthenticationError:
         logger.error('SMTPAuthenticationError')
+        Log.error('Authentication FAILED. Incorrect login credentials. Check username and password.')
         server.quit()
-        print('Authentication FAILED. Incorrect login credentials. Check username and password.')
         return False
 
     server.sendmail(send_from, send_to, multipart.as_string())
     logger.info('Email with meeting notes sent successfully')
+    Log.info('Email with meeting notes sent successfully')
     server.quit()
 
 
@@ -158,12 +160,14 @@ def run(cs, query_sp, meetingDate):
                               meeting_notes_columns=meeting_notes_columns,
                               meeting_notes_index_col=meeting_notes_index_col)
     logger.info('Procedure executed and dataframe created')
+    Log.info('Procedure executed and dataframe created')
 
     # send the dataframe
     send_dataframe(username=CONFIG['outlook_username'], password=CONFIG['outlook_password'], send_from=send_from,
                    send_to=send_to,
                    subject=subject, body=body, df=replace_breaks(df))
     logger.info('Email sent successfully')
+    Log.info('Email sent successfully')
 
 
 def ping_func():
@@ -196,16 +200,19 @@ def ping_func():
         group by t.PlanId
     '''
 
-    if len(sys.argv) < 2:
-        reference_date = datetime.now().strftime("%Y-%m-%d")
-    else:
+    # set reference_date to None
+    reference_date = None
+
+    # check if the user-input arguments exist and action them
+    if len(sys.argv) >= 2:
         try:
             opts, args = getopt.gnu_getopt(
                 sys.argv[1:], "hd:", ["date="]
             )
         except getopt.GetoptError as err:
             logging.error(str(err) + '.See --help for more information.')
-            print(str(err) + '.See --help for more information.')
+            Log.error(str(err) + '. See --help for more information.')
+
         # run query with date argument as reference date
         for option, val in opts:
             if option in ("-h", "--help"):
@@ -213,8 +220,14 @@ def ping_func():
                 sys.exit(0)
             elif option in ("-d", "--date"):
                 reference_date = val
+                logger.info(f'User specified the reference date: {reference_date}')
             else:
                 assert False, "Unhandled option, see --help for usage options"
+
+    # check if the date option was provided by a user, and if not - assign 'by default' date: now()
+    if reference_date is None:
+        reference_date = datetime.now().strftime("%Y-%m-%d")
+        logger.info(f'Reference date was NOT specified by a user and was set to a default value: {reference_date}')
 
     query_sp = CONFIG['query_sp']
     cs = CONFIG['cs']
@@ -228,7 +241,7 @@ def ping_func():
             run(cs=cs, query_sp=query_sp, meetingDate=task_df.loc[ind, 'CompletedDateTime'])
     else:
         logger.info('New meeting has not been held yet')
-        Log.info('New meeting has not been held yet - from mda')
+        Log.info('New meeting has not been held yet')
 
 
 if __name__ == "__main__":
