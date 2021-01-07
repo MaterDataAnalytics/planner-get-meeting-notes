@@ -1,4 +1,3 @@
-/****** Object:  StoredProcedure [planner].[DateRawRecords]    Script Date: 06/01/2021 2:32:08 PM ******/
 SET ANSI_NULLS ON
 GO
 
@@ -8,7 +7,7 @@ GO
 -- =============================================
 -- Author:      Fercen Curapiaca
 -- Create Date: 07/08/2020
--- Description: <Description, , >
+-- Description: <The procedure might be outdated and not used. The copy is from Dev database.>
 -- =============================================
 CREATE PROCEDURE [planner].[DateRawRecords]
 

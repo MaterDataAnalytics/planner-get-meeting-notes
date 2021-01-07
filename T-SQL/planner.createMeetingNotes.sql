@@ -1,17 +1,48 @@
-/****** Object:  StoredProcedure [planner].[createMeetingNotes]    Script Date: 06/01/2021 2:31:21 PM ******/
+/*
+###############################################################################
+#
+# File:     planner.createMeetingNotes.sql
+#
+# Purpose:  (1) Process new records with the 'desc%' name pattern from [planner].[RawPlanDate] table and insert into [planner].[Plan] table
+#           (2) Parse the LoadDate from the Filename
+#           (3) Update ProcessedYN flag in the [planner].[RawPlanDate] table in the end after processing
+#
+# Copyright 2020 Mater Misericordiae Ltd.
+#
+###############################################################################
+*/
+
+/*
+ Procedure:     
+               [planner].[createMeetingNotes]
+ Description:   
+               Create a final view for meeting notes using CleanBodyContent for Comments.
+ Parameters:    
+               @meetingDate  [datetime] - date of the meeting to use as a refernce for pulling the comments.
+		       @planId  [varchar(1000)] - unique ID of the meeting plan ("Plan") that will be used to pull meeting notes from.
+		       @maxDays  [int] - Number of days starting from the @meetingDate backwards to consolidate the comments left by the users under all tasks. It is used to avoid old and irrelevant comments. 
+			                     For example, if @maxDays = 30 and @meetingDate ='2020-11-04', only comments that were left between 2020-10-04 ad 2020-11-04 will be pulled (within 30 days from 2020-11-04 backwards).
+			   
+ Usage:
+               exec [planner].[createMeetingNotes];
+ Outputs:       
+               table with the extracted comments with the following fields:
+			   [Section]
+			   [Card Created DateTime]
+			   [Bucket]
+			   [Card Title]
+			   [Card Labels]
+			   [Date Description]
+			   [Task Description]
+			   [Comments]
+			   [Assignees]
+*/
 SET ANSI_NULLS ON
 GO
 
 SET QUOTED_IDENTIFIER ON
 GO
 
-
-
-
-
--- =============================================
--- Description: <Create a final view for meeting notes using CleanBodyContent for Comments>
--- =============================================
 CREATE PROCEDURE [planner].[createMeetingNotes]
 (
 		@meetingDate  datetime
@@ -21,6 +52,8 @@ CREATE PROCEDURE [planner].[createMeetingNotes]
 AS
 
 BEGIN
+
+	-- @separator helps to create a breaks between rows in the final Excel file.
 
 	declare @separator varchar(5) = '<br/>'
 

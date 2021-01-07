@@ -1,17 +1,35 @@
-/****** Object:  StoredProcedure [o365].[ProcessUsers]    Script Date: 06/01/2021 2:29:53 PM ******/
+/*
+###############################################################################
+#
+# File:     o365.ProcessUsers.sql
+#
+# Purpose:  (1) Process new records from [o365].[RawADData] source table and insert into separate columns of [o365].[User] table.
+#           (2) Parse the LoadDate from the Filename
+#           (3) Update ProcessedYN flag in the [o365].[RawADData] source table
+#
+# Copyright 2020 Mater Misericordiae Ltd.
+#
+###############################################################################
+*/
+
+/*
+ Procedure:     
+                [o365].[ProcessUsers]
+ Description:   
+               Process information on Planner Users (emials, names, etc) from [o365].[RawADData] table and insert into pre-created [o365].[User] table. The User data is recorded daily to account for any changes, such as new users.
+ Parameters:    
+               no parameters
+ Usage:
+               exec [o365].[ProcessUsers];
+ Outputs:       
+               processed data written into relevant table
+*/
 SET ANSI_NULLS ON
 GO
 
 SET QUOTED_IDENTIFIER ON
 GO
 
-
-
--- =============================================
--- Author:      <Alina Motygullina, Fercen Curapiaca>
--- Create Date: <November 6, 2020>
--- Description: <Creates a table with the parsed user data. The data come from the [o365].[RawADData] >
--- =============================================
 CREATE PROCEDURE [o365].[ProcessUsers]
 
 AS
