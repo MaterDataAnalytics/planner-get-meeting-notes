@@ -36,6 +36,4 @@ smtp_port = '587'
 
 # email params
 send_from = 'alina.motygullina@mater.org.au'
-#send_to = 'alina.motygullina@mater.org.au'
-#subject = 'Meeting notes for plan: '
 body = 'Please find the file attached'

@@ -15,8 +15,7 @@ from datetime import datetime
 
 from database import exec_procedure_to_df, query_to_df
 
-from parameters import planId_dict, maxDays, meeting_notes_columns, meeting_notes_index_col, send_from, send_to, \
-    subject, body
+from parameters import planId_dict, maxDays, meeting_notes_columns, meeting_notes_index_col, send_from, body
 
 # import CONFIG file for DEV or PROD
 import configparser
@@ -91,9 +90,9 @@ def make_email_subject(planId):
     :return: string for the email subject
     '''
     from parameters import planId_dict
-    return f'Meeting notes for the meeting {planId_dict[planId]}'
+    return f'Meeting notes for the meeting {planId_dict[planId][0]}'
 
-def map_planId_tite(planId):
+def map_planId_title(planId):
     '''
 
     :param planId: plan ID
@@ -101,7 +100,17 @@ def map_planId_tite(planId):
     '''
 
     from parameters import planId_dict
-    return planId_dict[planId]
+    return planId_dict[planId][0]
+
+def map_email_recipient(planId):
+    '''
+
+    :param planId: plan ID
+    :return: the email address of the recipient
+    '''
+
+    from parameters import planId_dict
+    return planId_dict[planId][1]
 
 def send_dataframe(username, password, send_from, send_to, subject, body, df):
     '''
@@ -172,13 +181,13 @@ def run(cs, query_sp, planId, meetingDate):
     df = exec_procedure_to_df(cs=cs, query=query_sp, meetingDate=meetingDate, planId=planId, maxDays=maxDays,
                               meeting_notes_columns=meeting_notes_columns,
                               meeting_notes_index_col=meeting_notes_index_col)
-    Log.info(f'Procedure executed and dataframe created for plan {map_planId_tite(planId)}')
+    Log.info(f'Procedure executed and dataframe created for plan {map_planId_title(planId)}')
 
     # send the dataframe
     send_dataframe(username=CONFIG['outlook_username'], password=CONFIG['outlook_password'], send_from=send_from,
-                   send_to=send_to,
+                   send_to=map_email_recipient(planId),
                    subject=make_email_subject(planId), body=body, df=replace_breaks(df))
-    Log.info(f'Email for plan {map_planId_tite(planId)} sent successfully')
+    Log.info(f'Email for plan {map_planId_title(planId)} sent successfully')
 
 
 def ping_func(planId_dict):
@@ -252,7 +261,7 @@ def ping_func(planId_dict):
             for ind, row in task_df.iterrows():
                 run(cs=cs, query_sp=query_sp, planId=planId, meetingDate=task_df.loc[ind, 'CompletedDateTime'])
         else:
-            Log.info(f'New meeting for {map_planId_tite(planId)} has not been held yet')
+            Log.info(f'New meeting for {map_planId_title(planId)} has not been held yet')
 
 
 if __name__ == "__main__":
