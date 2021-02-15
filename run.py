@@ -15,7 +15,7 @@ from datetime import datetime
 
 from database import exec_procedure_to_df, query_to_df
 
-from parameters import planId_list, maxDays, meeting_notes_columns, meeting_notes_index_col, send_from, send_to, \
+from parameters import planId_dict, maxDays, meeting_notes_columns, meeting_notes_index_col, send_from, send_to, \
     subject, body
 
 # import CONFIG file for DEV or PROD
@@ -84,6 +84,24 @@ def export_excel(df):
         writer.save()
         return buffer.getvalue()
 
+def make_email_subject(planId):
+    '''
+
+    :param planId: plan ID of the meeting that is a key iin the planId_dict dictionary
+    :return: string for the email subject
+    '''
+    from parameters import planId_dict
+    return f'Meeting notes for the meeting {planId_dict[planId]}'
+
+def map_planId_tite(planId):
+    '''
+
+    :param planId: plan ID
+    :return: the title of the plan with the planId
+    '''
+
+    from parameters import planId_dict
+    return planId_dict[planId]
 
 def send_dataframe(username, password, send_from, send_to, subject, body, df):
     '''
@@ -154,16 +172,16 @@ def run(cs, query_sp, planId, meetingDate):
     df = exec_procedure_to_df(cs=cs, query=query_sp, meetingDate=meetingDate, planId=planId, maxDays=maxDays,
                               meeting_notes_columns=meeting_notes_columns,
                               meeting_notes_index_col=meeting_notes_index_col)
-    Log.info(f'Procedure executed and dataframe created for plan {planId}')
+    Log.info(f'Procedure executed and dataframe created for plan {map_planId_tite(planId)}')
 
     # send the dataframe
     send_dataframe(username=CONFIG['outlook_username'], password=CONFIG['outlook_password'], send_from=send_from,
                    send_to=send_to,
-                   subject=subject + planId, body=body, df=replace_breaks(df))
-    Log.info(f'Email for plan {planId} sent successfully')
+                   subject=make_email_subject(planId), body=body, df=replace_breaks(df))
+    Log.info(f'Email for plan {map_planId_tite(planId)} sent successfully')
 
 
-def ping_func(planId_list):
+def ping_func(planId_dict):
     '''
     The polling function, to kick-start run.py when the condition met: a new 'Meeting Agenda and Attendees' task was marked as 'completed'
 
@@ -225,7 +243,7 @@ def ping_func(planId_list):
     cs = CONFIG['cs']
 
     # check that there are any plans with meetings to be processes
-    for planId in planId_list:
+    for planId in planId_dict:
         task_df = query_to_df(reference_date, planId, cs=cs, query=query,
                               cols=['planId', 'CompletedDateTime'])
 
@@ -234,9 +252,9 @@ def ping_func(planId_list):
             for ind, row in task_df.iterrows():
                 run(cs=cs, query_sp=query_sp, planId=planId, meetingDate=task_df.loc[ind, 'CompletedDateTime'])
         else:
-            Log.info(f'New meeting for {planId} has not been held yet')
+            Log.info(f'New meeting for {map_planId_tite(planId)} has not been held yet')
 
 
 if __name__ == "__main__":
 
-    ping_func(planId_list=planId_list)
+    ping_func(planId_dict=planId_dict)

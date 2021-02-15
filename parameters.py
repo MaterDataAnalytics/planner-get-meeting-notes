@@ -19,7 +19,9 @@ The following parameters are managed herein:
 '''
 
 # user input
-planId_list = ['-6-Vic94GE-s5oiwg57nAsgAFOm6']
+planId_dict = {
+    '-6-Vic94GE-s5oiwg57nAsgAFOm6': 'MMH Gov Committee',
+    }
 maxDays = 30
 
 # make meeting notes
