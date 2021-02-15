@@ -6,7 +6,7 @@ Currently plannerget-meeting-notes library does not provide a user interface (UI
 
 The following parameters are managed herein:
 
-1. Plan ID (relates to a Meeting Name)
+1. Plan ID (relates to a Meeting Name) dictionary: {'planId': (plan_Title, send_to_email)}
 
 2. Number of days counted backwards when meeting notes are being exported (old comments are not taken into account)
 
@@ -20,7 +20,8 @@ The following parameters are managed herein:
 
 # user input
 planId_dict = {
-    '-6-Vic94GE-s5oiwg57nAsgAFOm6': 'MMH Gov Committee',
+    '-6-Vic94GE-s5oiwg57nAsgAFOm6': ['MMH Gov Committee', 'alina.motygullina@mater.org.au'],
+    'OIJpgSEPdEmQH8qvRwC63MgADUak': ['SEQ Regional Health Exec', 'alina.motygullina@mater.org.au'],
     }
 maxDays = 30
 
@@ -35,6 +36,6 @@ smtp_port = '587'
 
 # email params
 send_from = 'alina.motygullina@mater.org.au'
-send_to = 'alina.motygullina@mater.org.au'
-subject = 'Meeting notes for plan: '
+#send_to = 'alina.motygullina@mater.org.au'
+#subject = 'Meeting notes for plan: '
 body = 'Please find the file attached'
