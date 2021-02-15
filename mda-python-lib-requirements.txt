@@ -1,0 +1,26 @@
+###############################################################################
+#
+# File:     mda-python-lib-requirements.txt
+#
+# Purpose:  holds all library dependencies for the mda-python-lib.
+#
+# Note:     This file is part of Mater Data & Analytics (MDA) core library.
+#
+# Copyright 2020 Mater Misericordiae Ltd.
+#
+###############################################################################
+#
+# Generated using `pipreqs` package.
+#
+
+requests==2.21.0
+pymsteams==0.1.12
+boto3==1.10.38
+pandas==0.24.2
+colorama==0.4.1
+pywin32==223
+pyodbc==4.0.26
+pdf2image==1.11.0
+Pillow==7.0.0
+PyPDF2==1.26.0
+pycrypto ==2.6.1

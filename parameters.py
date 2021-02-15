@@ -19,8 +19,9 @@ The following parameters are managed herein:
 '''
 
 # user input
-meetingDate = '2020-11-4'
-planId = '-6-Vic94GE-s5oiwg57nAsgAFOm6'
+planId_dict = {
+    '-6-Vic94GE-s5oiwg57nAsgAFOm6': 'MMH Gov Committee',
+    }
 maxDays = 30
 
 # make meeting notes
@@ -35,5 +36,5 @@ smtp_port = '587'
 # email params
 send_from = 'alina.motygullina@mater.org.au'
 send_to = 'alina.motygullina@mater.org.au'
-subject = 'Meeting notes'
+subject = 'Meeting notes for plan: '
 body = 'Please find the file attached'
