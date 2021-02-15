@@ -68,6 +68,7 @@ def query_to_df(*params, cs, query, cols):
 
     :return: dataframe
     '''
+
     # make connection pyodbc
     conn = pyodbc.connect(cs)
 

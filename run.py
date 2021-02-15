@@ -11,12 +11,11 @@ from smtplib import SMTPAuthenticationError
 from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-import logging
 from datetime import datetime
 
 from database import exec_procedure_to_df, query_to_df
 
-from parameters import planId, maxDays, meeting_notes_columns, meeting_notes_index_col, send_from, send_to, \
+from parameters import planId_list, maxDays, meeting_notes_columns, meeting_notes_index_col, send_from, send_to, \
     subject, body
 
 # import CONFIG file for DEV or PROD
@@ -35,6 +34,7 @@ from mater.mda.utils.sql import Db
 from mater.core.logger import Log, LogLevel
 
 Log.setLogLevel(LogLevel.INFO)
+
 
 def usage():
     """
@@ -106,9 +106,6 @@ def send_dataframe(username, password, send_from, send_to, subject, body, df):
     :return: error message in case of error
     '''
 
-    # logger
-    logger = logging.getLogger('main_logger')
-
     multipart = MIMEMultipart()
     multipart['From'] = send_from
     multipart['To'] = send_to
@@ -124,7 +121,6 @@ def send_dataframe(username, password, send_from, send_to, subject, body, df):
     try:
         server = smtplib.SMTP('smtp.mater.org.au', '587')
     except smtplib.socket.gaierror:
-        logger.error('smtplib.socket.gaierror')
         Log.error('smtplib.socket.gaierror was encountered')
         return False
     server.ehlo()
@@ -133,23 +129,22 @@ def send_dataframe(username, password, send_from, send_to, subject, body, df):
     try:
         server.login(username, password)
     except SMTPAuthenticationError:
-        logger.error('SMTPAuthenticationError')
         Log.error('Authentication FAILED. Incorrect login credentials. Check username and password.')
         server.quit()
         return False
 
     server.sendmail(send_from, send_to, multipart.as_string())
-    logger.info('Email with meeting notes sent successfully')
-    Log.info('Email with meeting notes sent successfully')
+    Log.info(f'Email with {subject} sent successfully')
     server.quit()
 
 
-def run(cs, query_sp, meetingDate):
+def run(cs, query_sp, planId, meetingDate):
     '''
     Run the pipeline of sending the meeting notes
 
     :param cs: connecting string, specified in ping_func()
     :param query_sp: query string to execute a stored procedure, specified in ping_func()
+    :param planId: meeting planID to get the meeting notes for
     :param meetingDate: meeting date identified as a date of 'Meeting Agenda and Attendees' task completion
 
     :return:
@@ -159,33 +154,31 @@ def run(cs, query_sp, meetingDate):
     df = exec_procedure_to_df(cs=cs, query=query_sp, meetingDate=meetingDate, planId=planId, maxDays=maxDays,
                               meeting_notes_columns=meeting_notes_columns,
                               meeting_notes_index_col=meeting_notes_index_col)
-    logger.info('Procedure executed and dataframe created')
-    Log.info('Procedure executed and dataframe created')
+    Log.info(f'Procedure executed and dataframe created for plan {planId}')
 
     # send the dataframe
     send_dataframe(username=CONFIG['outlook_username'], password=CONFIG['outlook_password'], send_from=send_from,
                    send_to=send_to,
-                   subject=subject, body=body, df=replace_breaks(df))
-    logger.info('Email sent successfully')
-    Log.info('Email sent successfully')
+                   subject=subject + planId, body=body, df=replace_breaks(df))
+    Log.info(f'Email for plan {planId} sent successfully')
 
 
-def ping_func():
+def ping_func(planId_list):
     '''
     The polling function, to kick-start run.py when the condition met: a new 'Meeting Agenda and Attendees' task was marked as 'completed'
 
     :return:
     '''
 
-    # add logger
-    logger = logging.getLogger('main_logger')
-
     # (1) == Get the 'Meeting agenda and Attendees' Task latest record <-- this will be only one row with the latest CompletedDateTime
+
     query = '''
         declare @dateReference as datetime = ?
+        declare @planId as varchar(200) = ?
+        
         select 
-            t.planid, 
-            max(t.CompletedDateTime) as CompletedDateTime
+            t.PlanId, 
+            min(t.CompletedDateTime) as CompletedDateTime
         from [planner].[Task] t
             inner join [planner].PlanBucket b 
                 on t.PlanId = b.PlanId and t.LoadDate = b.LoadDate and t.BucketId = b.BucketId
@@ -194,7 +187,7 @@ def ping_func():
         where t.LoadDate= (select max(LoadDate) from [planner].[Task])
             and b.BucketName like '%agenda%'
             and t.title like '%meeting focus and attendees%'
-            and p.Title like '%committee%'
+            and p.PlanId = @planId
             and t.CompletedDateTime is not NULL
             and t.CompletedDateTime > dateadd(day, -1, @dateReference)
         group by t.PlanId
@@ -210,7 +203,6 @@ def ping_func():
                 sys.argv[1:], "hd:", ["date="]
             )
         except getopt.GetoptError as err:
-            logging.error(str(err) + '.See --help for more information.')
             Log.error(str(err) + '. See --help for more information.')
 
         # run query with date argument as reference date
@@ -220,43 +212,31 @@ def ping_func():
                 sys.exit(0)
             elif option in ("-d", "--date"):
                 reference_date = val
-                logger.info(f'User specified the reference date: {reference_date}')
+                Log.info(f'User specified the reference date: {reference_date}')
             else:
                 assert False, "Unhandled option, see --help for usage options"
 
     # check if the date option was provided by a user, and if not - assign 'by default' date: now()
     if reference_date is None:
         reference_date = datetime.now().strftime("%Y-%m-%d")
-        logger.info(f'Reference date was NOT specified by a user and was set to a default value: {reference_date}')
+        Log.info(f'Reference date was NOT specified by a user and was set to a default value: {reference_date}')
 
     query_sp = CONFIG['query_sp']
     cs = CONFIG['cs']
 
     # check that there are any plans with meetings to be processes
-    task_df = query_to_df(reference_date, cs=cs, query=query, cols=['planId', 'CompletedDateTime'])
+    for planId in planId_list:
+        task_df = query_to_df(reference_date, planId, cs=cs, query=query,
+                              cols=['planId', 'CompletedDateTime'])
 
-    # create meeting notes for all new meetings
-    if not task_df.empty:
-        for ind, row in task_df.iterrows():
-            run(cs=cs, query_sp=query_sp, meetingDate=task_df.loc[ind, 'CompletedDateTime'])
-    else:
-        logger.info('New meeting has not been held yet')
-        Log.info('New meeting has not been held yet')
+        # create meeting notes for all new meetings
+        if not task_df.empty:
+            for ind, row in task_df.iterrows():
+                run(cs=cs, query_sp=query_sp, planId=planId, meetingDate=task_df.loc[ind, 'CompletedDateTime'])
+        else:
+            Log.info(f'New meeting for {planId} has not been held yet')
 
 
 if __name__ == "__main__":
-    # Add logger
-    logger = logging.getLogger('main_logger')
-    logger.setLevel(logging.INFO)
-    # create a file handler
-    fh = logging.FileHandler('planner_get_meeting_notes.log', mode='a', encoding=None, delay=False)
-    fh.setLevel(logging.DEBUG)
 
-    # format
-    formatter = logging.Formatter('-->%(asctime)s - %(name)s:%(levelname)s - %(message)s')
-    fh.setFormatter(formatter)
-
-    # add the handlers to the logger
-    logger.addHandler(fh)
-
-    ping_func()
+    ping_func(planId_list=planId_list)
