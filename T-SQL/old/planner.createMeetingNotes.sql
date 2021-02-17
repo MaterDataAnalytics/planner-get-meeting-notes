@@ -73,14 +73,10 @@ BEGIN
 	from (
 		select
 			row_number() over(partition by s1.[Index] order by isnull(s1.[Index], 99), isnull(s2.[Index], 99), b.BucketName, t.CreatedDateTime asc) as [__Entry],
-			/*isnull(s1.[Index], 99) as */
-			s1.[Index] [__SortBucket],
+			isnull(s1.[Index], 99) as [__SortBucket],
 			isnull(s2.[Index], 99) as [__SortTask],
 			t.CreatedDateTime as [Card Created DateTime],
 			b.BucketName as Bucket,
-			b.bucketid,
-			t.TaskId,
-			t.PlanId,
 			t.Title as [Card Title],
 			'"' + ISNULL(c.Labels, '') + '"' as [Card Labels],
 			case when t.PercentComplete = 100 then concat('completed ', convert(varchar(10), t.completedDateTime, 103))
@@ -90,60 +86,58 @@ BEGIN
 			'"' + ISNULL(replace(p.Content,char(10), @separator), '') + '"' as [Comments],
 			'"' + ISNULL(a.AssignedNames, '') + '"' as [Assigneess]
 		from planner.Task t
-
-	
 		inner join planner.PlanBucket b
 		on t.PlanId = b.PlanId and t.BucketId = b.BucketId and t.LoadDate = b.LoadDate
-		left join (
-			-- get consolidated posts
-			select
-					ab.Planid
-				,ab.BucketId
-				,ab.TaskId
-				,ab.LoadDate
-				,string_agg(
-						concat(convert(varchar(10), ab.CreatedDateTime, 103), ' by ', ab.FromName, ': ', ab.CleanBodyContent), @separator) as Content
-			from (
-				select Planid
-					,bucketid
-					,taskid
-					,createddatetime
-					,fromname
-					,LoadDate
-					,CleanBodyContent
-				from planner.TaskPost
-				where CreatedDateTime > DATEADD(day, -@maxDays, @meetingDate)
-					and CreatedDateTime < @meetingDate
-					and CleanBodyContent not like 'None'
-					and CleanBodyContent is not NULL
-			) ab
-			group by ab.Planid, ab.bucketid, ab.taskid, ab.LoadDate
+			left join (
+				-- get consolidated posts
+				select
+					 ab.Planid
+					,ab.BucketId
+					,ab.TaskId
+					,ab.LoadDate
+					,string_agg(
+							concat(convert(varchar(10), ab.CreatedDateTime, 103), ' by ', ab.FromName, ': ', ab.CleanBodyContent), @separator) as Content
+				from (
+					select Planid
+						,bucketid
+						,taskid
+						,createddatetime
+						,fromname
+						,LoadDate
+						,CleanBodyContent
+					from planner.TaskPost
+					where CreatedDateTime > DATEADD(day, -@maxDays, @meetingDate)
+					   and CreatedDateTime < @meetingDate
+					   and CleanBodyContent not like 'None'
+					   and CleanBodyContent is not NULL
+				) ab
+				group by ab.Planid, ab.bucketid, ab.taskid, ab.LoadDate
 
-		) p
-		on p.PlanId = t.PlanId and p.TaskId = t.TaskId and p.LoadDate = t.LoadDate
+			) p
+			on p.PlanId = t.PlanId and p.TaskId = t.TaskId and p.LoadDate = t.LoadDate
 
-		left join (
-			-- get consolidated caterogies
-			select
-				c.planid,
-				c.taskid,
-				c.LoadDate,
-				string_agg(
-					case when c.Category = 'category1' then p.Category1
-							when c.Category = 'category2' then p.Category2
-							when c.Category = 'category3' then p.Category3
-							when c.Category = 'category4' then p.Category4
-							when c.Category = 'category5' then p.Category5
-							when c.Category = 'category6' then p.Category6
-					else '' end
-				, @separator) as Labels
-			from planner.TaskCategories c
-			inner join planner.[Plan] p
-			on p.planId = c.PlanId and p.LoadDate = c.LoadDate
-			group by c.Planid, c.taskid, c.LoadDate
+				left join (
+					-- get consolidated caterogies
+					select
+						c.planid,
+						c.taskid,
+						c.LoadDate,
+						string_agg(
+							case when c.Category = 'category1' then p.Category1
+								 when c.Category = 'category2' then p.Category2
+								 when c.Category = 'category3' then p.Category3
+								 when c.Category = 'category4' then p.Category4
+								 when c.Category = 'category5' then p.Category5
+								 when c.Category = 'category6' then p.Category6
+							else '' end
+						, @separator) as Labels
+					from planner.TaskCategories c
+					inner join planner.[Plan] p
+					on p.planId = c.PlanId and p.LoadDate = c.LoadDate
+					group by c.Planid, c.taskid, c.LoadDate
 
-		) c
-		on c.PlanId = t.PlanId and c.TaskId = t.TaskId and c.LoadDate = t.LoadDate
+				) c
+				on c.PlanId = t.PlanId and c.TaskId = t.TaskId and c.LoadDate = t.LoadDate
 
 		left join (
 			-- get consolidated assignees
@@ -177,40 +171,40 @@ BEGIN
 			group by Planid, bucketid, taskid, LoadDate
 		) a
 		on t.PlanId = a.PlanId and t.TaskId = a.TaskId and a.LoadDate = t.LoadDate
-
 		left join (
+
 			-- create a sorting index for the meeting template based on the bucket (sections)
-			select 
-				case	when BucketName like '%Agenda%' then 1 
-						when BucketName like '%outcomes%' then 2
-						when BucketName like '%Improved experience%' then 2
-						when BucketName like '%Lower Cost%' then 2
-						when BucketName like '%Quadruple Aim Initiatives%' then 2
-						when BucketName like '%Actions%' then 3
-						when BucketName like '%Messages%' then 4
-					else 5 end
-				as [Index],
-				PlanId, 
-				BucketId, 
-				LoadDate 
-			from planner.PlanBucket
+
+			select 1 as [Index],   'sds4wgPMLU6dgGF_P0lEucgAIsU2' as BucketId -- ?? Agenda
+			union all
+			select 2 as [Index],   'RbM_UCr3Q0ahe66zicnSuMgALvIV' as BucketId -- ??? Better outcomes
+			union all
+			select 2 as [Index],   'Plp2Vj5sxk6ImAgF6wzNh8gAD0YC' as BucketId -- ???? Improved experience ????????????
+			union all
+			select 2 as [Index],   'X1SG91SzS0C08wOw38WxBMgAPw2a' as BucketId -- ?? Lower Cost
+			union all
+			select 2 as [Index],   'duOah9ppSEmPCA0KBIQm_cgAAFzY' as BucketId -- ?? Quadruple Aim Initiatives
+			union all
+			select 3 as [Index],   'm8qnSzgjnUmMLZHCIwsl-MgAGn13' as BucketId -- ?? Actions
+			union all
+			select 4 as [Index],   'fXFrFvXA1UqxMmv1ZXTq-sgAJ7s-' as BucketId -- ?? Messages
 		) s1
-		on s1.BucketId = b.BucketId and s1.PlanId = t.PlanId and t.LoadDate = s1.LoadDate
+		on s1.BucketId = b.BucketId
 
 		left join (
-			-- create a sorting index for the meeting template based on the bucket (sections)
-			select 
-				case	when Title like '%Meeting Focus and Attendees%' then 1 
-						when Title like '%Acknowledgement of Country%' then 2
-						when Title like '%Matters to report%' then 3
-					else 4 end
-				as [Index],
-				PlanId, 
-				TaskId, 
-				LoadDate 
-			from planner.Task
+
+			-- create a sorting index for the meeting template based on the task (important stuff first)
+
+			select 1 as [Index],   'M_5gZ-hkZkqIDTnUKnQcicgAGT2I' as TaskId -- ? Meeting Focus and Attendees
+			union all
+			select 2 as [Index],   'UdVwLNHcLEWsmSN8UYzMGMgAD7QB' as TaskId -- Acknowledgement of Country
+			union all
+			select 3 as [Index],   'IFZA5ulDDUevRZGX1Z1fesgADYZf' as TaskId -- ?? Matters to report up
+
+			-- everything else no need to be sorted (index 99)
+
 		) s2
-		on s2.TaskId = t.TaskId and s2.PlanId = t.PlanId and t.LoadDate = s2.LoadDate
+		on s2.TaskId = t.TaskId
 
 		where t.planid = @planId
 		and t.LoadDate = (select max(LoadDate) from planner.Task where LoadDate < @meetingDate)
