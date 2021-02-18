@@ -12,11 +12,11 @@ from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from datetime import datetime
+import logging
 
 from database import exec_procedure_to_df, query_to_df
 
-from parameters import planId_dict, maxDays, meeting_notes_columns, meeting_notes_index_col, send_from, send_to, \
-    subject, body
+from parameters import planId_dict, maxDays, meeting_notes_columns, meeting_notes_index_col, send_from, body
 
 # import CONFIG file for DEV or PROD
 import configparser
@@ -26,13 +26,8 @@ config.read('config.ini')
 
 CONFIG = config['PROD']
 
-# add the path for mda-python-lib
-sys.path.insert(0, CONFIG['MDA_PYTHON_LIB'])
-
 # MDA imports
-from mater.mda.utils.sql import Db
 from mater.core.logger import Log, LogLevel
-
 Log.setLogLevel(LogLevel.INFO)
 
 
@@ -73,7 +68,7 @@ def export_excel(df):
     '''
     Exel exporter to creae an Excel file as an IO buffer to avoid saving a physical copy
 
-    :param df: input datagrame
+    :param df: input dataframe
 
     :return: buffer value
     '''
@@ -91,9 +86,9 @@ def make_email_subject(planId):
     :return: string for the email subject
     '''
     from parameters import planId_dict
-    return f'Meeting notes for the meeting {planId_dict[planId]}'
+    return f'Meeting notes for the meeting {planId_dict[planId][0]}'
 
-def map_planId_tite(planId):
+def map_planId_title(planId):
     '''
 
     :param planId: plan ID
@@ -101,7 +96,17 @@ def map_planId_tite(planId):
     '''
 
     from parameters import planId_dict
-    return planId_dict[planId]
+    return planId_dict[planId][0]
+
+def map_email_recipient(planId):
+    '''
+
+    :param planId: plan ID
+    :return: the email address of the recipient
+    '''
+
+    from parameters import planId_dict
+    return planId_dict[planId][1]
 
 def send_dataframe(username, password, send_from, send_to, subject, body, df):
     '''
@@ -139,6 +144,7 @@ def send_dataframe(username, password, send_from, send_to, subject, body, df):
     try:
         server = smtplib.SMTP('smtp.mater.org.au', '587')
     except smtplib.socket.gaierror:
+        logger.error('smtplib.socket.gaierror')
         Log.error('smtplib.socket.gaierror was encountered')
         return False
     server.ehlo()
@@ -147,11 +153,13 @@ def send_dataframe(username, password, send_from, send_to, subject, body, df):
     try:
         server.login(username, password)
     except SMTPAuthenticationError:
+        logger.error('SMTPAuthenticationError. Authentication FAILED. Incorrect login credentials. Check username and password.')
         Log.error('Authentication FAILED. Incorrect login credentials. Check username and password.')
         server.quit()
         return False
 
     server.sendmail(send_from, send_to, multipart.as_string())
+    logger.info(f'Email with {subject} sent successfully')
     Log.info(f'Email with {subject} sent successfully')
     server.quit()
 
@@ -172,16 +180,18 @@ def run(cs, query_sp, planId, meetingDate):
     df = exec_procedure_to_df(cs=cs, query=query_sp, meetingDate=meetingDate, planId=planId, maxDays=maxDays,
                               meeting_notes_columns=meeting_notes_columns,
                               meeting_notes_index_col=meeting_notes_index_col)
-    Log.info(f'Procedure executed and dataframe created for plan {map_planId_tite(planId)}')
+    logger.info(f'Procedure executed and dataframe created for plan {map_planId_title(planId)}')
+    Log.info(f'Procedure executed and dataframe created for plan {map_planId_title(planId)}')
 
     # send the dataframe
     send_dataframe(username=CONFIG['outlook_username'], password=CONFIG['outlook_password'], send_from=send_from,
-                   send_to=send_to,
+                   send_to=map_email_recipient(planId),
                    subject=make_email_subject(planId), body=body, df=replace_breaks(df))
-    Log.info(f'Email for plan {map_planId_tite(planId)} sent successfully')
+    logger.info(f'Email for plan {map_planId_title(planId)} sent successfully')
+    Log.info(f'Email for plan {map_planId_title(planId)} sent successfully')
 
 
-def ping_func(planId_dict):
+def ping_func(planId_dict, logger):
     '''
     The polling function, to kick-start run.py when the condition met: a new 'Meeting Agenda and Attendees' task was marked as 'completed'
 
@@ -221,6 +231,7 @@ def ping_func(planId_dict):
                 sys.argv[1:], "hd:", ["date="]
             )
         except getopt.GetoptError as err:
+            logger.error(str(err) + '. See --help for more information.')
             Log.error(str(err) + '. See --help for more information.')
 
         # run query with date argument as reference date
@@ -230,6 +241,7 @@ def ping_func(planId_dict):
                 sys.exit(0)
             elif option in ("-d", "--date"):
                 reference_date = val
+                logger.info(f'User specified the reference date: {reference_date}')
                 Log.info(f'User specified the reference date: {reference_date}')
             else:
                 assert False, "Unhandled option, see --help for usage options"
@@ -237,6 +249,7 @@ def ping_func(planId_dict):
     # check if the date option was provided by a user, and if not - assign 'by default' date: now()
     if reference_date is None:
         reference_date = datetime.now().strftime("%Y-%m-%d")
+        logger.info(f'Reference date was NOT specified by a user and was set to a default value: {reference_date}')
         Log.info(f'Reference date was NOT specified by a user and was set to a default value: {reference_date}')
 
     query_sp = CONFIG['query_sp']
@@ -252,9 +265,23 @@ def ping_func(planId_dict):
             for ind, row in task_df.iterrows():
                 run(cs=cs, query_sp=query_sp, planId=planId, meetingDate=task_df.loc[ind, 'CompletedDateTime'])
         else:
-            Log.info(f'New meeting for {map_planId_tite(planId)} has not been held yet')
+            logger.info(f'New meeting for {map_planId_title(planId)} has not been held yet')
+            Log.info(f'New meeting for {map_planId_title(planId)} has not been held yet')
 
 
 if __name__ == "__main__":
+    # Add logger
+    logger = logging.getLogger('main_logger')
+    logger.setLevel(logging.INFO)
+    # create a file handler
+    fh = logging.FileHandler('planner_get_meeting_notes.log', mode='a', encoding=None, delay=False)
+    fh.setLevel(logging.DEBUG)
 
-    ping_func(planId_dict=planId_dict)
+    # format
+    formatter = logging.Formatter('-->%(asctime)s - %(name)s:%(levelname)s - %(message)s')
+    fh.setFormatter(formatter)
+
+    # add the handlers to the logger
+    logger.addHandler(fh)
+
+    ping_func(planId_dict, logger)
