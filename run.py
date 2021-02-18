@@ -13,6 +13,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from datetime import datetime
 import logging
+from logging.handlers import RotatingFileHandler
 
 from database import exec_procedure_to_df, query_to_df
 
@@ -273,9 +274,10 @@ if __name__ == "__main__":
     # Add logger
     logger = logging.getLogger('main_logger')
     logger.setLevel(logging.INFO)
+
     # create a file handler
-    fh = logging.FileHandler('planner_get_meeting_notes.log', mode='a', encoding=None, delay=False)
-    fh.setLevel(logging.DEBUG)
+    fh = RotatingFileHandler('planner_get_meeting_notes.log', mode='a', encoding=None, delay=False, maxBytes=20000, backupCount=10)
+    fh.setLevel(logging.INFO)
 
     # format
     formatter = logging.Formatter('-->%(asctime)s - %(name)s:%(levelname)s - %(message)s')
