@@ -26,9 +26,6 @@ config.read('config.ini')
 
 CONFIG = config['PROD']
 
-# add the path for mda-python-lib
-sys.path.insert(0, CONFIG['MDA_PYTHON_LIB'])
-
 # MDA imports
 from mater.core.logger import Log, LogLevel
 Log.setLogLevel(LogLevel.INFO)
@@ -71,7 +68,7 @@ def export_excel(df):
     '''
     Exel exporter to creae an Excel file as an IO buffer to avoid saving a physical copy
 
-    :param df: input datagrame
+    :param df: input dataframe
 
     :return: buffer value
     '''
