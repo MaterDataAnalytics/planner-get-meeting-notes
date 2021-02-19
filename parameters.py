@@ -20,8 +20,8 @@ The following parameters are managed herein:
 
 # user input
 planId_dict = {
-    '-6-Vic94GE-s5oiwg57nAsgAFOm6': ['MMH Gov Committee', 'alina.motygullina@mater.org.au'],
-    'OIJpgSEPdEmQH8qvRwC63MgADUak': ['SEQ Regional Health Exec', 'alina.motygullina@mater.org.au'],
+    '-6-Vic94GE-s5oiwg57nAsgAFOm6': ['MMH Gov Committee', ['alina.motygullina@mater.org.au', 'alina.motygullina@mater.org.au']],
+    'OIJpgSEPdEmQH8qvRwC63MgADUak': ['SEQ Regional Health Exec', ['alina.motygullina@mater.org.au', 'alina.motygullina@mater.org.au']],
     }
 maxDays = 30
 
