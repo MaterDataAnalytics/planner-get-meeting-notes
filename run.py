@@ -103,7 +103,7 @@ def map_email_recipient(planId):
     '''
 
     :param planId: plan ID
-    :return: the email address of the recipient
+    :return: the list with the email address of the recipients
     '''
 
     from parameters import planId_dict
@@ -185,11 +185,12 @@ def run(cs, query_sp, planId, meetingDate):
     Log.info(f'Procedure executed and dataframe created for plan {map_planId_title(planId)}')
 
     # send the dataframe
-    send_dataframe(username=CONFIG['outlook_username'], password=CONFIG['outlook_password'], send_from=send_from,
-                   send_to=map_email_recipient(planId),
+    for email in map_email_recipient(planId):
+        send_dataframe(username=CONFIG['outlook_username'], password=CONFIG['outlook_password'], send_from=send_from,
+                   send_to=email,
                    subject=make_email_subject(planId), body=body, df=replace_breaks(df))
-    logger.info(f'Email for plan {map_planId_title(planId)} sent successfully')
-    Log.info(f'Email for plan {map_planId_title(planId)} sent successfully')
+        logger.info(f'Email for plan {map_planId_title(planId)} sent successfully to {email}')
+        Log.info(f'Email for plan {map_planId_title(planId)} sent successfully to {email}')
 
 
 def ping_func(planId_dict, logger):
