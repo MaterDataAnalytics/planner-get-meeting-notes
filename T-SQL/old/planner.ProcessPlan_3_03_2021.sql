@@ -41,7 +41,7 @@ BEGIN
     	UPDATE planner.RawPlanData
 		set LoadDate = convert(datetime2, (replace(left(right(Filename, 24), 10), '_', '-') + ' ' + replace(right(left(right(Filename, 24), 19), 8), '_', ':')), 120)
 			where LoadDate is NULL 
-				and Filename like 'desc%'
+				and (Filename like 'desc%' or Filename like 'catg%')
 				and ProcessedYN = 0
 
 		insert into [planner].[Plan]
@@ -53,6 +53,12 @@ BEGIN
 		,A.CeatedByUserId
 		,A.CeatedByApplicationDisplayName
 		,A.CeatedByApplicationId
+		,B.Category1
+		,B.Category2
+		,B.Category3
+		,B.Category4
+		,B.Category5
+		,B.Category6
 		,A.LoadDate
 		,A.InsertDate
 		from (
@@ -71,11 +77,27 @@ BEGIN
 		[Filename] like 'desc%'
 		and ProcessedYN = 0
 		) A
+		left outer join (
+			select C.PlanId
+				,JSON_VALUE(C.Content,'$.categoryDescriptions.category1') Category1
+				,JSON_VALUE(C.Content,'$.categoryDescriptions.category2') Category2
+				,JSON_VALUE(C.Content,'$.categoryDescriptions.category3') Category3
+				,JSON_VALUE(C.Content,'$.categoryDescriptions.category4') Category4
+				,JSON_VALUE(C.Content,'$.categoryDescriptions.category5') Category5
+				,JSON_VALUE(C.Content,'$.categoryDescriptions.category6') Category6
+				,convert(datetime2, (replace(left(right(C.Filename, 24), 10), '_', '-') + ' ' + replace(right(left(right(C.Filename, 24), 19), 8), '_', ':')), 120) LoadDate
+				from planner.RawPlanData C
+				where C.[Filename] like 'catg%'
+				and C.ProcessedYN = 0
+				) B
+		on A.PlanId = B.PlanId
+		and A.LoadDate = B.LoadDate
 	
 	-- update the ProcessedYN in the table
 		UPDATE planner.RawPlanData 
 			set ProcessedYN = 1
 			where Filename like 'desc%'
+			or Filename like 'catg%'
 		
 END
 

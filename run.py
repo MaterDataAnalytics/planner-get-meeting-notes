@@ -17,7 +17,7 @@ from logging.handlers import RotatingFileHandler
 
 from database import exec_procedure_to_df, query_to_df
 
-from parameters import planId_dict, maxDays, meeting_notes_columns, meeting_notes_index_col, send_from, body
+from parameters import planId_dict, meeting_notes_columns, meeting_notes_index_col, send_from, body
 
 # import CONFIG file for DEV or PROD
 import configparser
@@ -109,6 +109,16 @@ def map_email_recipient(planId):
     from parameters import planId_dict
     return planId_dict[planId][1]
 
+def map_maxDays(planId):
+    '''
+
+    :param planId: planID
+    :return: the maxDays parameter to exclude old content from the final notes
+    '''
+
+    from parameters import planId_dict
+    return planId_dict[planId][2]
+
 def send_dataframe(username, password, send_from, send_to, subject, body, df):
     '''
     Send data via email as an Excel attachment
@@ -165,13 +175,16 @@ def send_dataframe(username, password, send_from, send_to, subject, body, df):
     server.quit()
 
 
-def run(cs, query_sp, planId, meetingDate):
+def run(cs, query_sp, planId, maxDays, meetingDate):
     '''
     Run the pipeline of sending the meeting notes
 
     :param cs: connecting string, specified in ping_func()
     :param query_sp: query string to execute a stored procedure, specified in ping_func()
     :param planId: meeting planID to get the meeting notes for
+    :param maxDays: regulates what to include in the notes.
+                    Posts that are older than {meetingDate-maxDays} will not be included.
+                    Tasks that were closed more than {meetingDate-maxDays} will not be included
     :param meetingDate: meeting date identified as a date of 'Meeting Agenda and Attendees' task completion
 
     :return:
@@ -265,7 +278,7 @@ def ping_func(planId_dict, logger):
         # create meeting notes for all new meetings
         if not task_df.empty:
             for ind, row in task_df.iterrows():
-                run(cs=cs, query_sp=query_sp, planId=planId, meetingDate=task_df.loc[ind, 'CompletedDateTime'])
+                run(cs=cs, query_sp=query_sp, planId=planId, maxDays=map_maxDays(planId=planId), meetingDate=task_df.loc[ind, 'CompletedDateTime'])
         else:
             logger.info(f'New meeting for {map_planId_title(planId)} has not been held yet')
             Log.info(f'New meeting for {map_planId_title(planId)} has not been held yet')
