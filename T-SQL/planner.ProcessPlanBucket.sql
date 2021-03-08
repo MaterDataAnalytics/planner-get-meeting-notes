@@ -36,15 +36,15 @@ CREATE PROCEDURE [planner].[ProcessPlanBucket]
 AS
 
 BEGIN
-  #  -- SET NOCOUNT ON added to prevent extra result sets from
-  #  -- interfering with SELECT statements.
+  -- SET NOCOUNT ON added to prevent extra result sets from
+  -- interfering with SELECT statements.
     SET NOCOUNT ON
 
 	DECLARE @LoadDate as datetime
 	declare @PlanId as varchar(200)
 	declare @Filename as varchar(200)
 
-	# -- (1) update the LoadDate field in the RawPlanData if ProcessedYN=0 and filename is 'buck_plan_%' (for new records that are plan buckets)
+	-- (1) update the LoadDate field in the RawPlanData if ProcessedYN=0 and filename is 'buck_plan_%' (for new records that are plan buckets)
 	UPDATE planner.RawPlanData
 	set LoadDate = convert(datetime2, (replace(left(right(Filename, 24), 10), '_', '-') + ' ' + replace(right(left(right(Filename, 24), 19), 8), '_', ':')), 120)
 	where LoadDate is NULL 
@@ -60,7 +60,7 @@ BEGIN
 	WHERE [Filename] like 'buck%' 
 		and ProcessedYN = 0;
 
-	# -- (2) Insert parsed Plan Description data into [planner].[PlanBucket]. Table [planner].[PlanBucket] was created in accordance with a common DevOps parctice. No need to check IF EXISTS in procedures
+	-- (2) Insert parsed Plan Description data into [planner].[PlanBucket]. Table [planner].[PlanBucket] was created in accordance with a common DevOps parctice. No need to check IF EXISTS in procedures
 	OPEN cur
 	fetch next from cur into @Filename, @PlanId, @LoadDate
 
@@ -75,7 +75,7 @@ BEGIN
 		,GETDATE() InsertDate
 		from planner.RawPlanData P
 			cross apply openjson(JSON_QUERY(Content,'$.value'))
-				with(BucketName varchar(100) '$.name',
+				with(BucketName nvarchar(100) '$.name',
 				     OrderHint varchar(100) '$.orderHint',
 					 BucketId varchar(100) '$.id') A
 		where PlanId = @PlanId
@@ -83,7 +83,7 @@ BEGIN
 			    and LoadDate = @LoadDate 
 				and ProcessedYN = 0 
 	
-	# -- update the ProcessedYN in the table
+	-- update the ProcessedYN in the table
 		UPDATE planner.RawPlanData
 			set ProcessedYN = 1
 			where PlanId = @PlanId
@@ -91,7 +91,7 @@ BEGIN
 				and LoadDate = @LoadDate 
 				and ProcessedYN = 0 
 
-		# -- get next record before continuing
+		-- get next record before continuing
 		fetch next from cur into @Filename, @PlanId, @LoadDate
 	END
 

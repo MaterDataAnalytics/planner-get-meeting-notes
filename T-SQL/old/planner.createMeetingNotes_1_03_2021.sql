@@ -82,13 +82,13 @@ BEGIN
 			t.TaskId,
 			t.PlanId,
 			t.Title as [Card Title],
-			ISNULL(c.Labels, '') as [Card Labels],
+			'"' + ISNULL(c.Labels, '') + '"' as [Card Labels],
 			case when t.PercentComplete = 100 then concat('completed ', convert(varchar(10), t.completedDateTime, 103))
 				 when t.PercentComplete < 100 and t.dueDateTime is not null then concat('due ', convert(varchar(10), t.dueDateTime, 103))
 				 else concat('created ', convert(varchar(10), t.CreatedDateTime, 103)) end as [Date Description],
-			ISNULL(replace(t.TaskDescription, char(10), @separator), '') as [Task Description],
-			ISNULL(replace(p.Content,char(10), @separator), '') as [Comments],
-			ISNULL(a.AssignedNames, '') as [Assigneess]
+			'"' + ISNULL(replace(t.TaskDescription, char(10), @separator), '') + '"' as [Task Description],
+			'"' + ISNULL(replace(p.Content,char(10), @separator), '') + '"' as [Comments],
+			'"' + ISNULL(a.AssignedNames, '') + '"' as [Assigneess]
 		from planner.Task t
 
 	
@@ -182,16 +182,13 @@ BEGIN
 			-- create a sorting index for the meeting template based on the bucket (sections)
 			select 
 				case	when BucketName like '%Agenda%' then 1 
-						when BucketName like '%Outcomes%' then 2
+						when BucketName like '%outcomes%' then 2
 						when BucketName like '%Improved experience%' then 2
 						when BucketName like '%Lower Cost%' then 2
-						when BucketName like '%Consumers%' then 3
-						when BucketName like '%Stewardship%' then 4
-						when BucketName like '%Mater People%' then 5
-						when BucketName like '%Quadruple Aim Initiatives%' then 6
-						when BucketName like '%Actions%' then 7
-						when BucketName like '%Messages%' then 8
-					else 9 end
+						when BucketName like '%Quadruple Aim Initiatives%' then 2
+						when BucketName like '%Actions%' then 3
+						when BucketName like '%Messages%' then 4
+					else 5 end
 				as [Index],
 				PlanId, 
 				BucketId, 
@@ -216,7 +213,7 @@ BEGIN
 		on s2.TaskId = t.TaskId and s2.PlanId = t.PlanId and t.LoadDate = s2.LoadDate
 
 		where t.planid = @planId
-		and t.LoadDate = (select max(LoadDate) from planner.Task where LoadDate < DATEADD(day, 1, @meetingDate)) -- to account for the fact that Logic App captures data daily at 7pm and the today's data will be there the day after
+		and t.LoadDate = (select max(LoadDate) from planner.Task where LoadDate < @meetingDate)
 		and (
 				(t.PercentComplete = 100 and t.completedDateTime > DATEADD(day, -@maxDays, @meetingDate))
 			or
