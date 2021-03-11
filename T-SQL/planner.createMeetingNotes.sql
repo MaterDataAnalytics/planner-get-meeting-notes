@@ -58,7 +58,7 @@ BEGIN
 	declare @separator varchar(5) = '<br/>'
 
 	-- run output query -> for actions
-	select
+		select
 		concat([__SortBucket], '.',
 			replicate('0',2 - len(rtrim([__Entry]))) + rtrim([__Entry])
 		) as [Section],
@@ -82,7 +82,7 @@ BEGIN
 			t.TaskId,
 			t.PlanId,
 			t.Title as [Card Title],
-			ISNULL(c.Labels, '') as [Card Labels],
+			ISNULL(replace(c.Labels, char(10), @separator), '') as [Card Labels],
 			case when t.PercentComplete = 100 then concat('completed ', convert(varchar(10), t.completedDateTime, 103))
 				 when t.PercentComplete < 100 and t.dueDateTime is not null then concat('due ', convert(varchar(10), t.dueDateTime, 103))
 				 else concat('created ', convert(varchar(10), t.CreatedDateTime, 103)) end as [Date Description],
@@ -90,10 +90,10 @@ BEGIN
 			ISNULL(replace(p.Content,char(10), @separator), '') as [Comments],
 			ISNULL(a.AssignedNames, '') as [Assigneess]
 		from planner.Task t
-
 	
 		inner join planner.PlanBucket b
 		on t.PlanId = b.PlanId and t.BucketId = b.BucketId and t.LoadDate = b.LoadDate
+
 		left join (
 			-- get consolidated posts
 			select
@@ -128,18 +128,12 @@ BEGIN
 				c.planid,
 				c.taskid,
 				c.LoadDate,
-				string_agg(
-					case when c.Category = 'category1' then p.Category1
-							when c.Category = 'category2' then p.Category2
-							when c.Category = 'category3' then p.Category3
-							when c.Category = 'category4' then p.Category4
-							when c.Category = 'category5' then p.Category5
-							when c.Category = 'category6' then p.Category6
-					else '' end
-				, @separator) as Labels
+				string_agg(cat.CategoryTitle, @separator) as Labels
 			from planner.TaskCategories c
 			inner join planner.[Plan] p
-			on p.planId = c.PlanId and p.LoadDate = c.LoadDate
+			on p.planId = c.PlanId and p.LoadDate = c.LoadDate 
+			left join planner.PlanCategory cat
+			on c.PlanId = cat.PlanId and c.Category = cat.CategoryName and c.LoadDate = cat.LoadDate
 			group by c.Planid, c.taskid, c.LoadDate
 
 		) c
@@ -183,8 +177,6 @@ BEGIN
 			select 
 				case	when BucketName like '%Agenda%' then 1 
 						when BucketName like '%Outcomes%' then 2
-						when BucketName like '%Improved experience%' then 2
-						when BucketName like '%Lower Cost%' then 2
 						when BucketName like '%Consumers%' then 3
 						when BucketName like '%Stewardship%' then 4
 						when BucketName like '%Mater People%' then 5
@@ -220,12 +212,10 @@ BEGIN
 		and (
 				(t.PercentComplete = 100 and t.completedDateTime > DATEADD(day, -@maxDays, @meetingDate))
 			or
-				(t.PercentComplete < 100)
+				(t.PercentComplete < 100 and t.CreatedDateTime < @meetingDate)
 		)
 	) a
 	order by [__SortBucket], [__Entry] asc
 
 END
 GO
-
-
